@@ -60,6 +60,22 @@ body.bloqueado>header,body.bloqueado>.intro,body.bloqueado>#resumo,body.bloquead
 @media(max-width:760px){@supports (padding: env(safe-area-inset-top)){body{padding-top:max(24px, env(safe-area-inset-top));padding-left:max(16px, env(safe-area-inset-left));padding-right:max(16px, env(safe-area-inset-right))}}}
 .chk{display:flex;align-items:center;gap:8px;cursor:pointer}
 .chk input{width:auto}
+/* Ficha do dia: abre ao clicar num dia do calendário */
+#dlgDia{width:min(94vw,560px)}
+.dia-cabeca{display:flex;align-items:center;gap:10px;padding:18px 20px;background:#f1f6ef;border-bottom:1px solid var(--borda)}
+.dia-cabeca h3{margin:0;font-size:18px;letter-spacing:-.4px}
+.dia-cabeca p{margin:5px 0 0;font-size:12px;color:var(--cinza)}
+.dia-cabeca .espaco{flex:1;text-align:center;min-width:0}
+.dia-cabeca .navega{padding:8px 12px;min-height:36px;font-size:17px}
+.dia-resumo{display:flex;gap:8px;padding:16px 20px 0;flex-wrap:wrap}
+.dia-resumo .pill{flex:1;min-width:92px;background:#fafcf9;border:1px solid var(--borda);border-radius:14px;padding:11px 12px}
+.dia-resumo .pill b{display:block;font-size:19px;font-weight:600;letter-spacing:-.8px;line-height:1.4}
+.dia-resumo .pill span{font-size:10px;color:#64796c;font-weight:600;letter-spacing:.3px;text-transform:uppercase}
+.dia-lista{padding:0 20px;max-height:46dvh;overflow-y:auto}
+.grupo-hora{display:flex;align-items:center;gap:9px;margin:16px 0 0;font-size:10px;font-weight:650;letter-spacing:1px;text-transform:uppercase;color:#8a958d}
+.grupo-hora::after{content:"";flex:1;height:1px;background:#edf0eb}
+#dlgDia .rodape-form{margin:14px 0 0;padding:16px 20px 20px}
+#dlgDia .rodape-form .fechar{margin-right:auto}
 
 </style>
 </head>
@@ -74,7 +90,7 @@ body.bloqueado>header,body.bloqueado>.intro,body.bloqueado>#resumo,body.bloquead
 <section class="intro"><div class="eyebrow">Visão geral</div><h2>Espaço para o que importa.</h2><p>Seus compromissos, contas e próximos passos em um só lugar.</p></section>
 <div id="resumo"></div>
 <section class="agenda-shell" aria-label="Calendário de eventos">
-<div class="calendar-heading"><div><h2>Seu calendário</h2><p>Selecione um dia para ver os detalhes.</p></div><div class="navegar"><button onclick="mudarMes(-1)" aria-label="Mês anterior">‹</button><strong id="tituloMes" aria-live="polite"></strong><button onclick="mudarMes(1)" aria-label="Próximo mês">›</button></div></div>
+<div class="calendar-heading"><div><h2>Seu calendário</h2><p>Toque em um dia para abrir a ficha do dia.</p></div><div class="navegar"><button onclick="mudarMes(-1)" aria-label="Mês anterior">‹</button><strong id="tituloMes" aria-live="polite"></strong><button onclick="mudarMes(1)" aria-label="Próximo mês">›</button></div></div>
 <div class="filtros" id="filtros" aria-label="Filtrar por categoria"></div><div class="calendario" id="calendario"></div><div class="legenda" id="legenda"></div>
 </section><section class="painel" id="painelDia" aria-live="polite"></section>
 <footer><span>Agenda do Joceir · Um dia de cada vez.</span><span id="estadoSync">◌ Conectando à nuvem…</span></footer>
@@ -149,6 +165,20 @@ body.bloqueado>header,body.bloqueado>.intro,body.bloqueado>#resumo,body.bloquead
       <button type="submit" class="principal">⬆️ Importar</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="dlgDia" aria-labelledby="dlgDiaTitulo">
+  <div class="dia-cabeca">
+    <button type="button" class="navega" onclick="navegarDia(-1)" aria-label="Dia anterior">‹</button>
+    <div class="espaco"><h3 id="dlgDiaTitulo">Dia</h3><p id="dlgDiaData"></p></div>
+    <button type="button" class="navega" onclick="navegarDia(1)" aria-label="Próximo dia">›</button>
+  </div>
+  <div class="dia-resumo" id="dlgDiaResumo"></div>
+  <div class="dia-lista" id="dlgDiaLista"></div>
+  <div class="rodape-form">
+    <button type="button" class="fechar" onclick="fecharDia()">Fechar</button>
+    <button type="button" onclick="novoEvento(diaSelecionado)">＋ Evento neste dia</button>
+  </div>
 </dialog>
 
 <script>
@@ -360,14 +390,92 @@ function desenharPainelDia() {
   document.getElementById("painelDia").innerHTML = html;
 }
 
-function desenharTudo() { desenharLegenda(); desenharFiltros(); desenharCalendario(); desenharResumo(); desenharPainelDia(); }
+function desenharTudo() { desenharLegenda(); desenharFiltros(); desenharCalendario(); desenharResumo(); desenharPainelDia(); if (document.getElementById("dlgDia").open) desenharFichaDia(); }
+
+/* ============================================================
+   FICHA DO DIA — o que o dia terá, aberto ao clicar no calendário
+   ============================================================ */
+const GRUPO_PERIODO = [
+  { nome: "Manhã", de: 0, ate: 12 },
+  { nome: "Tarde", de: 12, ate: 18 },
+  { nome: "Noite", de: 18, ate: 24 },
+];
+
+function linhaDoDia(e) {
+  const c = cat(e.tipo);
+  const badges = [
+    e.tipo === "boletorecorrente" ? `<span class="badge">todo dia ${e.diaMes}º</span>` : "",
+    e.pessoa ? `<span class="badge">👤 ${escapar(e.pessoa)}</span>` : "",
+    e.valor ? `<span class="badge">R$ ${escapar(e.valor)}</span>` : "",
+    e.importante ? `<span class="badge">🔔 aviso ${e.avisoDias ?? 0} dia(s) antes</span>` : "",
+  ].join("");
+  return `<div class="linha-evento">
+    <div class="ponto" style="background:${c.cor}"></div>
+    <div class="txt"><b>${e.importante ? "🔔 " : ""}${e.hora ? escapar(e.hora) + " — " : ""}${escapar(e.titulo)}</b><small>${c.nome}${e.obs ? " · " + escapar(e.obs) : ""}</small></div>
+    ${badges}
+    <div class="acoes">
+      <button onclick="editarEvento('${e.id}')">✏️ Editar</button>
+      ${e.tipo === "boletorecorrente" ? "" : `<button onclick="marcarFeito('${e.id}')">✔ Concluído</button>`}
+      <button onclick="excluirRapido('${e.id}')">🗑</button>
+    </div></div>`;
+}
+
+function desenharFichaDia() {
+  const evs = eventosDoDia(diaSelecionado);
+  const d = new Date(diaSelecionado + "T12:00:00");
+  const ehHoje = diaSelecionado === hojeStr();
+  const rotulo = (ehHoje ? "Hoje, " : d.toLocaleDateString("pt-BR", { weekday: "long" }) + ", ") +
+    d.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" });
+  document.getElementById("dlgDiaTitulo").textContent = rotulo.charAt(0).toUpperCase() + rotulo.slice(1);
+  document.getElementById("dlgDiaData").textContent =
+    evs.length + (evs.length === 1 ? " compromisso nesse dia" : " compromissos nesse dia");
+
+  const comHora = evs.filter(e => e.hora).length;
+  const avisos = evs.filter(e => e.importante).length;
+  const total = evs.reduce((s, e) => s + (parseFloat(String(e.valor || "0").replace(",", ".")) || 0), 0);
+  let pills = `<div class="pill"><b>${String(evs.length).padStart(2, "0")}</b><span>No dia</span></div>
+    <div class="pill"><b>${String(comHora).padStart(2, "0")}</b><span>Com hora</span></div>
+    <div class="pill"><b>${String(avisos).padStart(2, "0")}</b><span>Com aviso</span></div>
+    <div class="pill"><b>${total ? "R$ " + total.toFixed(2).replace(".", ",") : "—"}</b><span>Em contas</span></div>`;
+  document.getElementById("dlgDiaResumo").innerHTML = pills;
+
+  if (!evs.length) {
+    document.getElementById("dlgDiaLista").innerHTML =
+      `<div class="vazio-msg"><span class="empty-icon" aria-hidden="true">✓</span>Nada marcado para este dia.<br>Toque em “＋ Evento neste dia” para organizar a rotina.</div>`;
+    return;
+  }
+
+  let html = "";
+  const comHoraLista = evs.filter(e => e.hora);
+  const semHora = evs.filter(e => !e.hora);
+  GRUPO_PERIODO.forEach(g => {
+    const doGrupo = comHoraLista.filter(e => { const h = parseInt(e.hora.slice(0, 2)); return h >= g.de && h < g.ate; });
+    if (!doGrupo.length) return;
+    html += `<div class="grupo-hora">${g.nome}</div>` + doGrupo.map(linhaDoDia).join("");
+  });
+  if (semHora.length) html += `<div class="grupo-hora">Sem horário definido</div>` + semHora.map(linhaDoDia).join("");
+  document.getElementById("dlgDiaLista").innerHTML = html;
+}
 
 /* ============================================================
    AÇÕES
    ============================================================ */
 function mudarMes(delta) { mesAtual.setMonth(mesAtual.getMonth() + delta); desenharCalendario(); animar("calendario"); }
 function irParaHoje() { mesAtual = new Date(); mesAtual.setDate(1); diaSelecionado = hojeStr(); desenharTudo(); }
-function abrirDia(dataStr) { diaSelecionado = dataStr; desenharCalendario(); desenharPainelDia(); animar("painelDia"); }
+function abrirDia(dataStr) {
+  diaSelecionado = dataStr;
+  desenharCalendario(); desenharPainelDia(); desenharFichaDia();
+  document.getElementById("dlgDia").showModal();
+}
+function fecharDia() { document.getElementById("dlgDia").close(); }
+/* Navegar entre dias sem fechar a ficha; o calendário acompanha o mês do dia */
+function navegarDia(delta) {
+  const d = new Date(diaSelecionado + "T12:00:00");
+  d.setDate(d.getDate() + delta);
+  diaSelecionado = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  mesAtual = new Date(d.getFullYear(), d.getMonth(), 1);
+  desenharTudo(); animar("painelDia");
+}
 
 function montarFormulario() {
   document.getElementById("fTipo").innerHTML = CONFIG.categorias.map(c => `<option value="${c.id}">${c.nome}</option>`).join("");
