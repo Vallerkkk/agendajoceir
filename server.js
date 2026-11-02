@@ -5,6 +5,7 @@
 */
 const express = require("express");
 const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,7 +29,10 @@ function sbHeaders() {
 }
 
 async function sbFetch(caminho, opts = {}) {
-  const resp = await fetch(SUPABASE_URL + "/rest/v1/" + caminho, opts);
+  const resp = await fetch(SUPABASE_URL + "/rest/v1/" + caminho, {
+    ...opts,
+    headers: { ...sbHeaders(), ...(opts.headers || {}) },
+  });
   if (!resp.ok) {
     const corpo = await resp.text().catch(() => "");
     throw new Error("Supabase " + resp.status + ": " + corpo);
@@ -66,8 +70,99 @@ async function salvarEventos(eventos) {
   return listarEventos();
 }
 
+/* ---------- acesso (login) ---------- */
+/* O navegador deriva hash = PBKDF2(senha, salt); a senha nunca chega ao servidor.
+   A tabela agenda_acesso guarda uma única linha (id=1). */
+async function lerAcesso() {
+  const rows = await sbFetch("agenda_acesso?select=usuario,salt,hash&id=eq.1&limit=1");
+  return (rows && rows[0]) || null;
+}
+
+const sessoes = new Map(); /* token -> timestamp de expiração */
+const DIA_MS = 24 * 3600 * 1000;
+const VALIDADE_SESSAO = 30 * DIA_MS;
+
+function tokenDaSessao(req) {
+  const m = (req.headers.cookie || "").match(/(?:^|;\s*)agenda_sessao=([a-f0-9]{64})/);
+  return m ? m[1] : null;
+}
+function sessaoValida(req) {
+  const t = tokenDaSessao(req);
+  if (!t) return false;
+  const expira = sessoes.get(t);
+  if (!expira) return false;
+  if (Date.now() > expira) { sessoes.delete(t); return false; }
+  sessoes.set(t, Date.now() + VALIDADE_SESSAO); /* renova a cada uso */
+  return true;
+}
+function exigirSessao(req, res, next) {
+  if (sessaoValida(req)) return next();
+  res.status(401).json({ erro: "não autenticado" });
+}
+function definirCookie(res, token) {
+  res.setHeader("Set-Cookie",
+    "agenda_sessao=" + token + "; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000; Secure");
+}
+
 /* ---------- API ---------- */
-app.get("/api/eventos", async (req, res) => {
+app.get("/api/acesso", async (req, res) => {
+  try {
+    if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) throw new Error("banco não configurado");
+    const a = await lerAcesso();
+    res.json({ cadastrado: !!a, usuario: a ? a.usuario : null, salt: a ? a.salt : null });
+  } catch (e) {
+    console.error(e);
+    res.status(502).json({ erro: "Falha ao ler o cadastro de acesso" });
+  }
+});
+
+app.post("/api/acesso", async (req, res) => {
+  try {
+    const { usuario, salt, hash } = req.body || {};
+    if (!usuario || String(usuario).trim().length < 2 || String(usuario).length > 80)
+      return res.status(400).json({ erro: "usuário inválido" });
+    if (!/^[a-f0-9]{32}$/.test(salt || "")) return res.status(400).json({ erro: "salt inválido" });
+    if (!/^[a-f0-9]{64}$/.test(hash || "")) return res.status(400).json({ erro: "hash inválido" });
+    if (await lerAcesso()) return res.status(409).json({ erro: "já existe um acesso cadastrado" });
+    await sbFetch("agenda_acesso", {
+      method: "POST",
+      headers: { ...sbHeaders(), Prefer: "return=minimal" },
+      body: JSON.stringify({ id: 1, usuario: String(usuario).trim(), salt, hash }),
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(502).json({ erro: "Falha ao criar o acesso" });
+  }
+});
+
+app.post("/api/login", async (req, res) => {
+  try {
+    const { usuario, hash } = req.body || {};
+    const a = await lerAcesso();
+    if (!a) return res.status(400).json({ erro: "nenhum acesso cadastrado" });
+    const esperado = Buffer.from(a.hash, "hex");
+    const recebido = Buffer.from(/^[a-f0-9]{64}$/.test(hash || "") ? hash : "0".repeat(64), "hex");
+    if (usuario !== a.usuario || !crypto.timingSafeEqual(esperado, recebido))
+      return res.status(401).json({ erro: "usuário ou senha incorretos" });
+    const token = crypto.randomBytes(32).toString("hex");
+    sessoes.set(token, Date.now() + VALIDADE_SESSAO);
+    definirCookie(res, token);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(502).json({ erro: "Falha ao entrar" });
+  }
+});
+
+app.post("/api/sair", (req, res) => {
+  const t = tokenDaSessao(req);
+  if (t) sessoes.delete(t);
+  res.setHeader("Set-Cookie", "agenda_sessao=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0; Secure");
+  res.json({ ok: true });
+});
+
+app.get("/api/eventos", exigirSessao, async (req, res) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) throw new Error("banco não configurado");
     res.json(await listarEventos());
@@ -77,7 +172,7 @@ app.get("/api/eventos", async (req, res) => {
   }
 });
 
-app.put("/api/eventos", async (req, res) => {
+app.put("/api/eventos", exigirSessao, async (req, res) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) throw new Error("banco não configurado");
     const eventos = req.body && Array.isArray(req.body.eventos) ? req.body.eventos : null;
