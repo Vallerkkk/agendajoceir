@@ -602,6 +602,22 @@ function sairAgenda() {
   document.getElementById('loginUsuario').focus({ preventScroll: true });
 }
 
+/* Sessão contínua: o cookie vale 30 dias; se ainda for válido, o site
+   abre direto sem pedir senha (o botão Sair revoga o cookie no servidor). */
+async function retomarSessao() {
+  try {
+    const resp = await fetch('/api/eventos');
+    if (!resp.ok) return;
+    sessaoAtiva = true;
+    document.getElementById('login').hidden = true;
+    document.body.classList.remove('bloqueado');
+    desenharTudo();
+    carregarDaNuvem(true);
+    inscreverPush();
+  } catch {}
+}
+retomarSessao();
+
 /* ============================================================
    NOTIFICAÇÕES — eventos importantes geram lembrete no navegador
    ============================================================ */

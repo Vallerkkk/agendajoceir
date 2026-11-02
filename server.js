@@ -88,22 +88,37 @@ async function lerAcesso() {
   return (rows && rows[0]) || null;
 }
 
-const sessoes = new Map(); /* token -> timestamp de expiração */
+const sessoesRevogadas = new Set(); /* saídas feitas enquanto o processo estava ativo */
 const DIA_MS = 24 * 3600 * 1000;
 const VALIDADE_SESSAO = 30 * DIA_MS;
+/* Segredo que assina o token: uma variável própria ou, na falta, a chave do banco.
+   Como o token é auto-validável, a sessão sobrevive a reinícios do servidor. */
+const SEGREDOS_SESSAO = process.env.SESSION_SECRET || SUPABASE_SECRET_KEY || "agenda-joceir";
 
+function assinar(texto) {
+  return crypto.createHmac("sha256", SEGREDOS_SESSAO).update(texto).digest("hex");
+}
+function novoToken() {
+  const corpo = crypto.randomBytes(16).toString("hex") + "." + (Date.now() + VALIDADE_SESSAO);
+  return corpo + "." + assinar(corpo);
+}
 function tokenDaSessao(req) {
-  const m = (req.headers.cookie || "").match(/(?:^|;\s*)agenda_sessao=([a-f0-9]{64})/);
-  return m ? m[1] : null;
+  const m = (req.headers.cookie || "").match(/(?:^|;\s*)agenda_sessao=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
 }
 function sessaoValida(req) {
   const t = tokenDaSessao(req);
-  if (!t) return false;
-  const expira = sessoes.get(t);
-  if (!expira) return false;
-  if (Date.now() > expira) { sessoes.delete(t); return false; }
-  sessoes.set(t, Date.now() + VALIDADE_SESSAO); /* renova a cada uso */
-  return true;
+  if (!t || sessoesRevogadas.has(t)) return false;
+  const partes = t.split(".");
+  if (partes.length !== 3) return false;
+  const [nonce, expStr, sig] = partes;
+  const esperado = assinar(nonce + "." + expStr);
+  let ok = false;
+  try {
+    ok = sig.length === esperado.length &&
+      crypto.timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(esperado, "hex"));
+  } catch { return false; }
+  return ok && Number(expStr) > Date.now();
 }
 function exigirSessao(req, res, next) {
   if (sessaoValida(req)) return next();
@@ -155,8 +170,7 @@ app.post("/api/login", async (req, res) => {
     const recebido = Buffer.from(/^[a-f0-9]{64}$/.test(hash || "") ? hash : "0".repeat(64), "hex");
     if (usuario !== a.usuario || !crypto.timingSafeEqual(esperado, recebido))
       return res.status(401).json({ erro: "usuário ou senha incorretos" });
-    const token = crypto.randomBytes(32).toString("hex");
-    sessoes.set(token, Date.now() + VALIDADE_SESSAO);
+    const token = novoToken();
     definirCookie(res, token);
     res.json({ ok: true });
   } catch (e) {
@@ -167,7 +181,7 @@ app.post("/api/login", async (req, res) => {
 
 app.post("/api/sair", (req, res) => {
   const t = tokenDaSessao(req);
-  if (t) sessoes.delete(t);
+  if (t) sessoesRevogadas.add(t);
   res.setHeader("Set-Cookie", "agenda_sessao=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0; Secure");
   res.json({ ok: true });
 });
