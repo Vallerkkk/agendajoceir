@@ -2,8 +2,16 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>J&amp;S Joceir e Silvia — Agenda</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#197465">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Agenda J&amp;S">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--azul:#197465;--azul-claro:#e8f4ef;--cinza:#758079;--fundo:#f4f6f2;--branco:#fff;--borda:#e2e8e1;--verde:#197465;--vermelho:#c45151}
@@ -46,6 +54,8 @@ body>#resumo{animation-delay:1.72s}body>.agenda-shell{animation-delay:1.8s}body>
 body.bloqueado>header,body.bloqueado>.intro,body.bloqueado>#resumo,body.bloqueado>.agenda-shell,body.bloqueado>#painelDia,body.bloqueado>footer{display:none!important}
 .login-page{min-height:calc(100dvh - 80px);display:grid;place-items:center;padding:24px 0}.login-page[hidden]{display:none}.login-card{width:min(100%,420px);padding:32px;background:#fff;border:1px solid var(--borda);border-radius:24px;box-shadow:0 16px 65px #2443320d;animation:modalIn .5s ease-out}.login-card>.brand-logo{margin:0 auto 24px;width:190px;height:auto}.login-card h2{font-size:25px;letter-spacing:-.7px;text-align:center}.login-description{color:var(--cinza);font-size:13px;line-height:1.7;text-align:center;margin:10px 0 22px}.login-card form{padding:0;gap:16px}.senha-wrap{position:relative}.senha-wrap input{padding-right:74px}.senha-wrap button{position:absolute;right:4px;top:4px;min-height:32px;padding:6px 9px;font-size:10px;border:0;background:transparent}.login-submit{width:100%;margin-top:4px}.login-error{color:var(--vermelho);font-size:12px;line-height:1.6}.login-error:empty{display:none}.login-note{font-size:11px;line-height:1.7;color:var(--cinza);text-align:center;border-top:1px solid var(--borda);padding-top:18px;margin-top:22px}.login-confirm[hidden]{display:none}.login-kicker{text-align:center;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--azul);margin-bottom:10px}
 @media(max-width:760px){.login-card{padding:25px 20px}.login-page{min-height:calc(100dvh - 48px)}}
+@supports (padding: env(safe-area-inset-top)){body{padding-top:max(40px, env(safe-area-inset-top));padding-left:max(36px, env(safe-area-inset-left));padding-right:max(36px, env(safe-area-inset-right))}}
+@media(max-width:760px){@supports (padding: env(safe-area-inset-top)){body{padding-top:max(24px, env(safe-area-inset-top));padding-left:max(16px, env(safe-area-inset-left));padding-right:max(16px, env(safe-area-inset-right))}}}
 .chk{display:flex;align-items:center;gap:8px;cursor:pointer}
 .chk input{width:auto}
 
@@ -673,6 +683,11 @@ function verificarAvisos() {
 }
 
 atualizarBotaoSino();
+
+/* Webapp instalável (iPhone: Compartilhar → Adicionar à Tela de Início) */
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
 </script>
 </body>
 </html>
