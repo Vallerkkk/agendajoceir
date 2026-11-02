@@ -2,7 +2,7 @@
    - Arquivos do app: rede primeiro, cache como reserva (funciona offline)
    - /api/*: nunca em cache (sincronização sempre ao vivo)
 */
-const CACHE = "agenda-js-v2";
+const CACHE = "agenda-js-v3";
 const ESTATICOS = ["/", "/index.html", "/manifest.webmanifest", "/logo-joceir-silvia.png",
   "/icons/favicon-32.png", "/icons/favicon-48.png",
   "/icons/apple-touch-icon.png", "/icons/icon-192.png", "/icons/icon-512.png",
@@ -34,6 +34,20 @@ self.addEventListener("fetch", ev => {
       })
       .catch(() => caches.match(ev.request).then(hit => hit || caches.match("/index.html")))
   );
+});
+
+/* Push do servidor (lembrete diário das 09:00 e avisos futuros) */
+self.addEventListener("push", ev => {
+  let dados = {};
+  try { dados = ev.data ? ev.data.json() : {}; }
+  catch { dados = { body: ev.data ? ev.data.text() : "" }; }
+  ev.waitUntil(self.registration.showNotification(dados.title || "Agenda J&S", {
+    body: dados.body || "Hora de checar a agenda.",
+    tag: dados.tag || "agenda-push",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/favicon-48.png",
+    data: dados.data || {},
+  }));
 });
 
 /* Notificações recebidas por push (quando ativadas) abrem o app ao toque */

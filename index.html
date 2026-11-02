@@ -565,6 +565,7 @@ async function autenticar(ev) {
     const rLogin = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario, hash }) });
     if (!rLogin.ok) { const j = await rLogin.json().catch(() => ({})); throw new Error(j.erro || 'Não foi possível entrar.'); }
     sessaoAtiva = true;
+    inscreverPush();
     document.getElementById('loginForm').reset();
     document.getElementById('loginSenha').type = 'password';
     document.getElementById('mostrarSenha').textContent = 'Mostrar';
@@ -627,8 +628,27 @@ async function ativarNotificacoes() {
   if (!("Notification" in window)) return;
   try { await Notification.requestPermission(); } catch {}
   atualizarBotaoSino();
-  if (Notification.permission === "granted") notificar("Notificações ativadas! Você será lembrado dos eventos importantes.");
+  if (Notification.permission === "granted") { notificar("Notificações ativadas! Você será lembrado dos eventos importantes."); inscreverPush(); }
   else if (Notification.permission === "denied") notificar("Notificações bloqueadas pelo navegador. Libere nas configurações do site.");
+}
+
+/* Inscrição push: permite que o servidor mande o lembrete das 09:00
+   mesmo com o app fechado (funciona no iPhone quando instalado na tela inicial). */
+async function inscreverPush() {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  if (!("PushManager" in window) || !("serviceWorker" in navigator)) return;
+  try {
+    const { publicKey, pronta } = await (await fetch("/api/push-chave")).json();
+    if (!pronta) return;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const bruto = atob(publicKey), bytes = new Uint8Array(bruto.length);
+      for (let i = 0; i < bruto.length; i++) bytes[i] = bruto.charCodeAt(i);
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+    }
+    await fetch("/api/inscricoes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sub.toJSON()) });
+  } catch {}
 }
 
 /* Próxima data em que o evento cai (pontual ou recorrente) */
@@ -656,6 +676,14 @@ function diasAte(de, ate) {
 function verificarAvisos() {
   if (!sessaoAtiva || !("Notification" in window) || Notification.permission !== "granted") return;
   const hoje = hojeStr();
+  /* Lembrete diário de manhã (reforço local quando o app está aberto;
+     com ele fechado o push do servidor cuida do envio). */
+  const chaveDia = "diario@" + hoje;
+  if (!avisosEnviados[chaveDia] && new Date().getHours() >= 9) {
+    avisosEnviados[chaveDia] = Date.now();
+    localStorage.setItem(AVISOS_CHAVE, JSON.stringify(avisosEnviados));
+    try { new Notification("🔔 Agenda J&S", { body: "Hora de checar a agenda de hoje.", tag: "agenda-diaria" }); } catch {}
+  }
   eventos.filter(e => e.importante).forEach(e => {
     const ocorrencia = proximaOcorrencia(e, hoje);
     if (!ocorrencia) return;

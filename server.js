@@ -6,12 +6,22 @@
 const express = require("express");
 const path = require("path");
 const crypto = require("crypto");
+const webpush = require("web-push");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
+
+const VAPID_PUBLICA = process.env.VAPID_PUBLIC_KEY || null;
+const VAPID_PRIVADA = process.env.VAPID_PRIVATE_KEY || null;
+const VAPID_CONTATO = process.env.VAPID_SUBJECT || "mailto:agenda@joceir.local";
+const CRON_TOKEN = process.env.CRON_TOKEN || null;
+
+if (VAPID_PUBLICA && VAPID_PRIVADA) {
+  webpush.setVapidDetails(VAPID_CONTATO, VAPID_PUBLICA, VAPID_PRIVADA);
+}
 
 if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
   console.warn("AVISO: defina as variáveis SUPABASE_URL e SUPABASE_SECRET_KEY.");
@@ -185,6 +195,83 @@ app.put("/api/eventos", exigirSessao, async (req, res) => {
 });
 
 app.get("/api/saude", (req, res) => res.json({ ok: true }));
+
+/* ---------- notificações push (lembrete diário às 09:00) ---------- */
+/* A tabela agenda_push guarda uma linha por dispositivo: endpoint + subscription. */
+
+app.get("/api/push-chave", (req, res) => {
+  res.json({ publicKey: VAPID_PUBLICA, pronta: !!(VAPID_PUBLICA && VAPID_PRIVADA) });
+});
+
+app.post("/api/inscricoes", exigirSessao, async (req, res) => {
+  try {
+    const s = req.body || {};
+    if (!/^https:\/\//.test(s.endpoint || "") || !s.keys || !s.keys.p256dh || !s.keys.auth)
+      return res.status(400).json({ erro: "inscrição inválida" });
+    await sbFetch("agenda_push?on_conflict=endpoint", {
+      method: "POST",
+      headers: { ...sbHeaders(), Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ endpoint: s.endpoint, dados: s }),
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(502).json({ erro: "Falha ao guardar a inscrição" });
+  }
+});
+
+app.delete("/api/inscricoes", exigirSessao, async (req, res) => {
+  try {
+    const endpoint = (req.body || {}).endpoint || "";
+    if (!endpoint) return res.status(400).json({ erro: "envie { endpoint }" });
+    await sbFetch("agenda_push?endpoint=eq." + encodeURIComponent(endpoint),
+      { method: "DELETE", headers: sbHeaders() });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(502).json({ erro: "Falha ao remover a inscrição" });
+  }
+});
+
+/* Chamado uma vez por dia pelo agendador externo (cron) às 09:00 de Brasília. */
+app.post("/api/despacho", async (req, res) => {
+  try {
+    if (!CRON_TOKEN) return res.status(503).json({ erro: "CRON_TOKEN não configurado" });
+    if (req.headers["x-agenda-token"] !== CRON_TOKEN)
+      return res.status(401).json({ erro: "token inválido" });
+    if (!VAPID_PUBLICA || !VAPID_PRIVADA)
+      return res.status(503).json({ erro: "chaves VAPID não configuradas" });
+
+    const linhas = await sbFetch("agenda_push?select=endpoint,dados");
+    const corpo = JSON.stringify({
+      title: "Agenda J&S",
+      body: "Bom dia! Hora de checar a agenda de hoje.",
+      tag: "agenda-diaria",
+      data: { url: "/" },
+    });
+
+    let enviados = 0, mortas = 0, falhas = 0;
+    for (const linha of linhas || []) {
+      try {
+        await webpush.sendNotification(linha.dados, corpo);
+        enviados++;
+      } catch (e) {
+        if (e && (e.statusCode === 404 || e.statusCode === 410)) {
+          await sbFetch("agenda_push?endpoint=eq." + encodeURIComponent(linha.endpoint),
+            { method: "DELETE", headers: sbHeaders() }).catch(() => {});
+          mortas++;
+        } else {
+          console.error("push falhou", linha.endpoint.slice(0, 60), e && e.statusCode);
+          falhas++;
+        }
+      }
+    }
+    res.json({ total: (linhas || []).length, enviados, mortas, falhas });
+  } catch (e) {
+    console.error(e);
+    res.status(502).json({ erro: "Falha no disparo" });
+  }
+});
 
 /* ---------- site estático ---------- */
 app.use(express.static(path.join(__dirname)));
