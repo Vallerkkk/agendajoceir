@@ -23,7 +23,12 @@ const CRON_TOKEN = process.env.CRON_TOKEN || null;
 const EMAIL_PARA = (process.env.EMAIL_PARA || "").split(/[,;]/).map(s => s.trim()).filter(Boolean);
 const EMAIL_DESDE = process.env.EMAIL_DESDE || "joceiragenda@gmail.com";
 const BREVO_API_KEY = process.env.BREVO_API_KEY || null; /* envia por HTTPS — funciona no Render grátis */
-const SMS_PARA = (process.env.SMS_PARA || "").split(/[,;]/).map(s => s.trim()).filter(Boolean);
+/* aceita "27 999795399", "27999795399" ou "+5527999795399" */
+const SMS_PARA = (process.env.SMS_PARA || "")
+  .split(/[,;]/)
+  .map(s => s.replace(/\D/g, ""))
+  .filter(Boolean)
+  .map(d => (d.startsWith("55") || d.length <= 9 ? d : "55" + d));
 const SMS_REMETENTE = process.env.SMS_REMETENTE || "AgendaJS"; /* nome aprovado na Brevo para SMS */
 const SMTP_HOST = process.env.SMTP_HOST || null;     /* ex.: smtp.gmail.com */
 const SMTP_PORT = process.env.SMTP_PORT || "465";
@@ -330,17 +335,23 @@ async function enviarEmail(resumo, hoje, m) {
 }
 
 async function enviarSMS(m) {
-  const resp = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
-    method: "POST",
-    headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ sender: SMS_REMETENTE, sms: frase(m), recipients: SMS_PARA }),
-  });
-  const corpo = await resp.text().catch(() => "");
-  if (!resp.ok) throw new Error("Brevo " + resp.status + ": " + corpo);
-  let lista;
-  try { lista = JSON.parse(corpo); } catch { lista = null; }
-  const ruins = (Array.isArray(lista) ? lista : []).filter(x => x.status && x.status !== "success");
-  if (ruins.length) throw new Error(ruins.map(x => x.errorCode + " " + x.message).join("; "));
+  /* a API da Brevo aceita um destino por chamada (campo "recipient", não array) */
+  const base = { sender: SMS_REMETENTE, content: frase(m) + " " + SITE_URL, type: "transactional" };
+  const erros = [];
+  for (const numero of SMS_PARA) {
+    const resp = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+      method: "POST",
+      headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ ...base, recipient: numero }),
+    });
+    if (!resp.ok) {
+      const texto = await resp.text().catch(() => "");
+      let msg = texto;
+      try { msg = JSON.parse(texto).message; } catch {}
+      erros.push(numero + ": " + msg);
+    }
+  }
+  if (erros.length) throw new Error(erros.join(" | "));
 }
 
 app.post("/api/despacho", async (req, res) => {
