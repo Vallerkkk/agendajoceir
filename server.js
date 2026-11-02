@@ -21,6 +21,8 @@ const VAPID_CONTATO = process.env.VAPID_SUBJECT || "mailto:agenda@joceir.local";
 const CRON_TOKEN = process.env.CRON_TOKEN || null;
 
 const EMAIL_PARA = process.env.EMAIL_PARA || null;   /* ex.: joceircipriano@gmail.com */
+const EMAIL_DESDE = process.env.EMAIL_DESDE || "joceiragenda@gmail.com";
+const BREVO_API_KEY = process.env.BREVO_API_KEY || null; /* envia por HTTPS — funciona no Render grátis */
 const SMTP_HOST = process.env.SMTP_HOST || null;     /* ex.: smtp.gmail.com */
 const SMTP_PORT = process.env.SMTP_PORT || "465";
 const SMTP_USUARIO = process.env.SMTP_USUARIO || null;
@@ -283,6 +285,27 @@ function resumoDoDia(rows, hoje) {
 }
 
 async function enviarEmail(resumo, hoje) {
+  const dataBR = hoje.split("-").reverse().join("/");
+  const assunto = "Checar agenda! (" + dataBR + ")";
+  const texto = "Checar agenda!\n\nBom dia! Sua agenda de " + dataBR + ":\n"
+    + resumo + "\n\nAbrir agenda: " + SITE_URL + "\n";
+
+  if (BREVO_API_KEY) {
+    /* API por HTTPS: funciona no plano gratuito do Render, que bloqueia SMTP */
+    const resp = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        sender: { name: "Agenda J&S", email: EMAIL_DESDE },
+        to: [{ email: EMAIL_PARA }],
+        subject: assunto,
+        textContent: texto,
+      }),
+    });
+    if (!resp.ok) throw new Error("Brevo " + resp.status + ": " + await resp.text().catch(() => ""));
+    return;
+  }
+
   const transportador = nodemailer.createTransport({
     host: SMTP_HOST, port: Number(SMTP_PORT), secure: String(SMTP_PORT) === "465",
     auth: { user: SMTP_USUARIO, pass: SMTP_SENHA },
@@ -290,13 +313,11 @@ async function enviarEmail(resumo, hoje) {
        fica ~2 min presa esperando uma conexão que nunca acontece */
     connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 10000,
   });
-  const dataBR = hoje.split("-").reverse().join("/");
   await transportador.sendMail({
     from: '"Agenda J&S" <' + SMTP_USUARIO + ">",
     to: EMAIL_PARA,
-    subject: "Checar agenda! (" + dataBR + ")",
-    text: "Checar agenda!\n\nBom dia! Sua agenda de " + dataBR + ":\n"
-      + resumo + "\n\nAbrir agenda: " + SITE_URL + "\n",
+    subject: assunto,
+    text: texto,
   });
 }
 
@@ -333,7 +354,7 @@ app.post("/api/despacho", async (req, res) => {
       }
     }
     let email = "nao configurado";
-    if (EMAIL_PARA && SMTP_HOST && SMTP_USUARIO && SMTP_SENHA) {
+    if (EMAIL_PARA && (BREVO_API_KEY || (SMTP_HOST && SMTP_USUARIO && SMTP_SENHA))) {
       try {
         const eventos = await listarEventos();
         await enviarEmail(resumoDoDia(eventos, hojeSaoPaulo()), hojeSaoPaulo());
