@@ -291,8 +291,8 @@ async function enviarEmail(resumo, hoje) {
   await transportador.sendMail({
     from: '"Agenda J&S" <' + SMTP_USUARIO + ">",
     to: EMAIL_PARA,
-    subject: "Bom dia! Sua agenda de " + dataBR,
-    text: "Bom dia! Hora de checar a agenda de hoje (" + dataBR + ").\n\n"
+    subject: "Checar agenda! (" + dataBR + ")",
+    text: "Checar agenda!\n\nBom dia! Sua agenda de " + dataBR + ":\n"
       + resumo + "\n\nAbrir agenda: " + SITE_URL + "\n",
   });
 }
