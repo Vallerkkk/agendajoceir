@@ -628,18 +628,25 @@ async function ativarNotificacoes() {
   if (!("Notification" in window)) return;
   try { await Notification.requestPermission(); } catch {}
   atualizarBotaoSino();
-  if (Notification.permission === "granted") { notificar("Notificações ativadas! Você será lembrado dos eventos importantes."); inscreverPush(); }
+  if (Notification.permission === "granted") { notificar("Notificações ativadas! Você será lembrado dos eventos importantes."); inscreverPush(true); }
   else if (Notification.permission === "denied") notificar("Notificações bloqueadas pelo navegador. Libere nas configurações do site.");
 }
 
 /* Inscrição push: permite que o servidor mande o lembrete das 09:00
    mesmo com o app fechado (funciona no iPhone quando instalado na tela inicial). */
-async function inscreverPush() {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  if (!("PushManager" in window) || !("serviceWorker" in navigator)) return;
+async function inscreverPush(comAviso) {
+  if (!("Notification" in window) || Notification.permission !== "granted") {
+    if (comAviso && "Notification" in window && Notification.permission === "denied")
+      notificar("Notificações bloqueadas neste navegador. Libere no ícone ao lado do endereço.");
+    return false;
+  }
+  if (!("PushManager" in window) || !("serviceWorker" in navigator)) {
+    if (comAviso) notificar("Este navegador não envia avisos com o app fechado. No iPhone, use o ícone instalado na Tela de Início.");
+    return false;
+  }
   try {
     const { publicKey, pronta } = await (await fetch("/api/push-chave")).json();
-    if (!pronta) return;
+    if (!pronta) { if (comAviso) notificar("Servidor ainda não configura o lembrete diário."); return false; }
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
@@ -647,8 +654,14 @@ async function inscreverPush() {
       for (let i = 0; i < bruto.length; i++) bytes[i] = bruto.charCodeAt(i);
       sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
     }
-    await fetch("/api/inscricoes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sub.toJSON()) });
-  } catch {}
+    const r = await fetch("/api/inscricoes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sub.toJSON()) });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    if (comAviso) notificar("📲 Este aparelho vai receber o lembrete das 09:00.");
+    return true;
+  } catch {
+    if (comAviso) notificar("Não foi possível cadastrar este aparelho no lembrete diário. Tente de novo.");
+    return false;
+  }
 }
 
 /* Próxima data em que o evento cai (pontual ou recorrente) */
