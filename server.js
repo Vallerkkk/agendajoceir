@@ -276,13 +276,15 @@ function hojeSaoPaulo() {
 
 const NOMES_CAT = {
   boletorecorrente: "Boleto recorrente", boletoesp: "Boleto esporádico", visita: "Visita a cliente",
-  compromisso: "Compromisso", retorno: "Retorno a cliente", consulta: "Consulta médica",
+  compromisso: "Compromisso", compromissorecorrente: "Compromisso recorrente",
+  retorno: "Retorno a cliente", consulta: "Consulta médica",
 };
 
 function resumoDoDia(rows, hoje) {
   const dia = Number(hoje.slice(8, 10));
+  /* recorrente é o que tem diaMes: repete todo mês, sem data fixa */
   const doDia = (rows || []).map(r => r.dados).filter(e =>
-    e.tipo === "boletorecorrente" ? Number(e.diaMes) === dia : e.data === hoje
+    e.diaMes ? Number(e.diaMes) === dia : e.data === hoje
   );
   if (!doDia.length) return "Nenhum evento para hoje.";
   return doDia.map(e => {

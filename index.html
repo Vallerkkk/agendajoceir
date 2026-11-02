@@ -29,7 +29,7 @@ button:hover{background:var(--azul-claro);border-color:#b9d6c7;transform:transla
 .agenda-shell{background:white;border:1px solid var(--borda);border-radius:22px;padding:24px;margin-bottom:22px;box-shadow:0 6px 25px #24433204}.calendar-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px}.calendar-heading h2{font-size:18px;letter-spacing:-.4px}.calendar-heading p{color:var(--cinza);font-size:12px;margin-top:5px}.navegar{display:flex;gap:7px;align-items:center}.navegar strong{text-align:center;font-size:15px;font-weight:600;min-width:165px;text-transform:capitalize}.navegar button{padding:8px 12px;min-height:35px}
 .filtros{display:flex;gap:7px;flex-wrap:wrap;padding-bottom:20px;border-bottom:1px solid #edf0eb;margin-bottom:18px}.filtros button{padding:7px 12px;font-size:11px;min-height:32px;background:#f7f9f5;border-color:transparent;border-radius:8px}.filtros button.ativo{background:var(--azul);color:white}
 .calendario{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}.dia-semana{text-align:right;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#8a958d;font-weight:650;padding:4px 12px 12px}.dia{background:#fafbf8;border:1px solid #edf0e9;border-radius:12px;min-height:104px;padding:9px;cursor:pointer;overflow:hidden;transition:background .2s,border-color .2s,transform .2s,box-shadow .2s}.dia:hover{background:#edf5ef;border-color:#b8d5c6;transform:translateY(-2px);box-shadow:0 4px 10px #224f3010}.dia.vazio{background:transparent;border-color:transparent;cursor:default;pointer-events:none}.dia .num{display:flex;align-items:center;justify-content:center;width:26px;height:26px;margin-left:auto;font-size:12px;font-weight:600;color:#617367}.dia.hoje .num{background:var(--azul);color:white;border-radius:8px}.dia.hoje{background:#f0f6ed;border-color:#c6dbc3}.dia.selecionado{border:2px solid #197465;background:#edf6f0;padding:8px}.item-dia{font-size:10px;border-radius:5px;padding:4px 5px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:white}.mais-dias{font-size:10px;color:var(--azul);margin-top:4px}.legenda{display:flex;flex-wrap:wrap;gap:15px;font-size:10px;color:var(--cinza);margin-top:20px;padding-top:16px;border-top:1px solid #edf0eb}.legenda span{display:flex;align-items:center;gap:5px}.ponto{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.cat-boletorecorrente{background:var(--vermelho)}.cat-boletoesp{background:#c6903b}.cat-visita{background:var(--azul)}.cat-compromisso{background:#8572ad}.cat-retorno{background:#69905a}.cat-consulta{background:#4b8f9d}
+.cat-boletorecorrente{background:var(--vermelho)}.cat-boletoesp{background:#c6903b}.cat-visita{background:var(--azul)}.cat-compromisso{background:#8572ad}.cat-compromissorecorrente{background:#546e7a}.cat-retorno{background:#69905a}.cat-consulta{background:#4b8f9d}
 .linha-evento{display:flex;align-items:center;gap:12px;padding:16px 0;border-bottom:1px solid #edf0eb;flex-wrap:wrap}.linha-evento:last-child{border:0}.linha-evento .txt{flex:1;min-width:150px;font-size:14px}.linha-evento .txt small{display:block;color:var(--cinza);font-size:12px;margin-top:5px}.acoes{display:flex;gap:6px}.acoes button{font-size:11px;padding:6px 10px;min-height:32px}.badge{font-size:10px;background:var(--azul-claro);color:var(--azul);border-radius:7px;padding:5px 8px}.vazio-msg{color:var(--cinza);font-size:13px;text-align:center;padding:22px 12px;line-height:1.8}.empty-icon{display:grid;place-items:center;background:#f0f5ed;width:48px;height:48px;border-radius:15px;margin:0 auto 10px;font-size:24px;color:#809a7c}.day-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.day-heading h2{margin:0}.day-heading button{font-size:11px;padding:7px 11px;min-height:34px}footer{display:flex;justify-content:space-between;color:#8b968e;font-size:11px;padding:0 4px 12px;gap:12px}
 dialog{margin:auto;border:1px solid #e2e8e1;border-radius:22px;padding:0;width:min(94vw,490px);max-height:90dvh;box-shadow:0 24px 100px #122d3433;color:#263d34}dialog[open]{animation:modalIn .26s cubic-bezier(.16,1,.3,1)}dialog::backdrop{background:#152d2766;backdrop-filter:blur(5px)}form{padding:27px;display:flex;flex-direction:column;gap:14px}form h3{font-size:22px;letter-spacing:-.6px;margin-bottom:6px}label{display:block;font-size:12px;font-weight:600;color:#5b6f62;margin-bottom:6px}input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--borda);background:#fafcf9;border-radius:10px;font:14px "Segoe UI",sans-serif;color:#263d34;transition:border-color .2s,box-shadow .2s}input:focus,select:focus,textarea:focus{outline:0;border-color:#6ca890;box-shadow:0 0 0 3px #19746512}textarea{resize:vertical;min-height:75px}.linha-form{display:flex;gap:8px}.linha-form>div{flex:1}.rodape-form{display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--borda);padding-top:16px;margin-top:4px}.rodape-form .excluir{margin-right:auto;color:var(--vermelho)}
 .ripple{position:absolute;border-radius:50%;background:currentColor;opacity:.18;transform:scale(0);pointer-events:none;animation:ripple .6s ease-out;z-index:-1}.refresh{animation:refresh .3s ease-out}.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#244c3f;color:#fff;padding:13px 22px;border-radius:12px;box-shadow:0 8px 30px #152d2730;z-index:100;font-size:13px;animation:modalIn .25s ease-out}.toast[hidden]{display:none}
@@ -191,6 +191,7 @@ const CONFIG = {
     { id: "boletoesp",        nome: "Boleto esporádico", cor: "#e07b00", todoMes: false, valor: true  },
     { id: "visita",           nome: "Visita a cliente",   cor: "#1e5aa8", todoMes: false, valor: false },
     { id: "compromisso",      nome: "Compromisso",        cor: "#6a1b9a", todoMes: false, valor: false },
+    { id: "compromissorecorrente", nome: "Compromisso recorrente", cor: "#546e7a", todoMes: true, valor: false },
     { id: "retorno",          nome: "Retorno a cliente",  cor: "#2e7d32", todoMes: false, valor: false },
     { id: "consulta",         nome: "Consulta médica",    cor: "#00838f", todoMes: false, valor: false, pessoa: true },
   ],
@@ -293,7 +294,9 @@ let editandoId = null;
 let diaSelecionado = hojeStr();
 
 function escapar(valor) { return String(valor ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function cat(id) { return CONFIG.categorias.find(c => c.id === id) || CONFIG.categorias[5]; }
+function cat(id) { return CONFIG.categorias.find(c => c.id === id) || CONFIG.categorias.find(c => c.id === "compromisso"); }
+/* Recorrente = categoria que se repete todo mês no mesmo dia (boleto ou compromisso) */
+function heRecorrente(e) { return !!(e && cat(e.tipo).todoMes); }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 /* Eventos que caem num dia: pontuais + recorrentes gerados */
@@ -302,7 +305,7 @@ function eventosDoDia(dataStr) {
   const d = new Date(ano, mes-1, dia);
   const diaSemana = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"][d.getDay()];
   let lista = eventos.filter(e =>
-    e.tipo === "boletorecorrente"
+    heRecorrente(e)
       ? (e.diaMes === dia || (dia <= new Date(ano, mes, 0).getDate() && e.diaMes > new Date(ano, mes, 0).getDate() && dia === new Date(ano, mes, 0).getDate()))
       : e.data === dataStr
   );
@@ -357,7 +360,7 @@ function desenharResumo() {
     const d = new Date(); d.setDate(d.getDate()+i);
     semana.push(...eventosDoDia(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`));
   }
-  const recorrentesMes = eventos.filter(e => e.tipo === "boletorecorrente" && (!filtro || e.tipo === filtro));
+  const recorrentesMes = eventos.filter(e => heRecorrente(e) && (!filtro || e.tipo === filtro));
   let html = `<div class="stat"><span class="stat-icon" aria-hidden="true">◎</span><div class="stat-label">Agendados para hoje</div><div class="stat-value">${String(hoje.length).padStart(2,"0")}</div><small>${h.split("-").reverse().join("/")}</small></div>
   <div class="stat"><span class="stat-icon" aria-hidden="true">▦</span><div class="stat-label">Próximos 7 dias</div><div class="stat-value">${String(semana.length).padStart(2,"0")}</div><small>Eventos na sua semana</small></div>
   <div class="stat"><span class="stat-icon" aria-hidden="true">↻</span><div class="stat-label">Boletos recorrentes</div><div class="stat-value">${String(recorrentesMes.length).padStart(2,"0")}</div><small>Contas que se repetem por mês</small></div>`;
@@ -373,7 +376,7 @@ function desenharPainelDia() {
   if (!evs.length) html += `<div class="vazio-msg"><span class="empty-icon" aria-hidden="true">✓</span>Um dia com espaço livre.<br>Adicione um evento e organize seus próximos passos.</div>`;
   evs.forEach(e => {
     const c = cat(e.tipo);
-    const marca = e.tipo === "boletorecorrente" ? `<span class="badge">todo dia ${e.diaMes}º</span>` : "";
+    const marca = heRecorrente(e) ? `<span class="badge">todo dia ${e.diaMes}º</span>` : "";
     const pessoa = e.pessoa ? `<span class="badge">👤 ${escapar(e.pessoa)}</span>` : "";
     const valor = e.valor ? `<span class="badge">R$ ${escapar(e.valor)}</span>` : "";
     const importante = e.importante ? `<span class="badge">🔔 lembrete ${e.avisoDias ?? 0} dia(s) antes</span>` : "";
@@ -383,7 +386,7 @@ function desenharPainelDia() {
       ${marca}${pessoa}${valor}${importante}
       <div class="acoes">
         <button onclick="editarEvento('${e.id}')">✏️ Editar</button>
-        ${e.tipo === "boletorecorrente" ? "" : `<button onclick="marcarFeito('${e.id}')">✔ Concluído</button>`}
+        ${heRecorrente(e) ? "" : `<button onclick="marcarFeito('${e.id}')">✔ Concluído</button>`}
         <button onclick="excluirRapido('${e.id}')">🗑</button>
       </div></div>`;
   });
@@ -404,7 +407,7 @@ const GRUPO_PERIODO = [
 function linhaDoDia(e) {
   const c = cat(e.tipo);
   const badges = [
-    e.tipo === "boletorecorrente" ? `<span class="badge">todo dia ${e.diaMes}º</span>` : "",
+    heRecorrente(e) ? `<span class="badge">todo dia ${e.diaMes}º</span>` : "",
     e.pessoa ? `<span class="badge">👤 ${escapar(e.pessoa)}</span>` : "",
     e.valor ? `<span class="badge">R$ ${escapar(e.valor)}</span>` : "",
     e.importante ? `<span class="badge">🔔 aviso ${e.avisoDias ?? 0} dia(s) antes</span>` : "",
@@ -415,7 +418,7 @@ function linhaDoDia(e) {
     ${badges}
     <div class="acoes">
       <button onclick="editarEvento('${e.id}')">✏️ Editar</button>
-      ${e.tipo === "boletorecorrente" ? "" : `<button onclick="marcarFeito('${e.id}')">✔ Concluído</button>`}
+      ${heRecorrente(e) ? "" : `<button onclick="marcarFeito('${e.id}')">✔ Concluído</button>`}
       <button onclick="excluirRapido('${e.id}')">🗑</button>
     </div></div>`;
 }
@@ -790,7 +793,7 @@ async function inscreverPush(comAviso) {
 
 /* Próxima data em que o evento cai (pontual ou recorrente) */
 function proximaOcorrencia(e, hoje) {
-  if (e.tipo === "boletorecorrente") {
+  if (heRecorrente(e)) {
     const [y, m, d] = hoje.split("-").map(Number);
     for (let k = 0; k < 2; k++) {
       let yy = y, mm = m + k;
