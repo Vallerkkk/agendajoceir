@@ -286,6 +286,9 @@ async function enviarEmail(resumo, hoje) {
   const transportador = nodemailer.createTransport({
     host: SMTP_HOST, port: Number(SMTP_PORT), secure: String(SMTP_PORT) === "465",
     auth: { user: SMTP_USUARIO, pass: SMTP_SENHA },
+    /* o plano gratuito do Render bloqueia SMTP: sem estes limites a requisição
+       fica ~2 min presa esperando uma conexão que nunca acontece */
+    connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 10000,
   });
   const dataBR = hoje.split("-").reverse().join("/");
   await transportador.sendMail({
