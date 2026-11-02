@@ -288,8 +288,14 @@ function resumoDoDia(rows, hoje) {
   );
   if (!doDia.length) return "Nenhum evento para hoje.";
   return doDia.map(e => {
-    const extra = [e.valor ? "R$ " + e.valor : "", e.pessoa || ""].filter(Boolean).join(" · ");
-    return "- " + (NOMES_CAT[e.tipo] || e.tipo) + ": " + e.titulo + (extra ? " (" + extra + ")" : "");
+    const extra = [
+      e.valor ? "R$ " + e.valor : "",
+      e.pessoa || "",
+      e.telefone ? "tel. " + e.telefone : "",
+    ].filter(Boolean).join(" · ");
+    let linha = "- " + (NOMES_CAT[e.tipo] || e.tipo) + ": " + e.titulo + (extra ? " (" + extra + ")" : "");
+    if (e.endereco) linha += "\n   endereço: " + e.endereco;
+    return linha;
   }).join("\n");
 }
 
@@ -494,6 +500,6 @@ app.post("/api/despacho", async (req, res) => {
 app.use(express.static(path.join(__dirname)));
 
 /* funções puras de atraso, exportadas para teste local (node -e "require('./server.js')") */
-module.exports = { atrasosDoDia, textoAtrasos, avisoAtraso, ultimoVencimento };
+module.exports = { atrasosDoDia, textoAtrasos, avisoAtraso, ultimoVencimento, resumoDoDia };
 
 app.listen(PORT, () => console.log("Agenda do Joceir rodando na porta " + PORT));

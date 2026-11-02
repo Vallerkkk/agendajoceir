@@ -78,6 +78,11 @@ body.bloqueado>header,body.bloqueado>.intro,body.bloqueado>#resumo,body.bloquead
 .badge.ok{background:#e6f2e5;color:#2e7d32}
 .badge.atraso{background:#fdeaea;color:#b3261e;font-weight:650}
 .linha-evento.atrasado{background:#fffbfa}
+.linha-contato{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.linha-contato a{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--azul);background:var(--azul-claro);border:1px solid #d9e8dd;border-radius:8px;padding:5px 9px;text-decoration:none;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;transition:transform .18s,background .18s,box-shadow .18s}
+.linha-contato a:hover{background:#dcece2;transform:translateY(-1px);box-shadow:0 3px 8px #224f3014}
+.linha-contato a:active{transform:scale(.96)}
+.subtitulo-campo{font-size:10px;font-weight:650;letter-spacing:1px;text-transform:uppercase;color:#8a958d;margin-bottom:12px}
 .contas-atraso{margin-top:18px;padding-top:4px;border-top:1px dashed #f0d3d3}
 .contas-atraso .contas-cabeca{margin-top:12px}
 .contas-atraso .contas-cabeca h2{color:#b3261e;font-size:14px}
@@ -202,6 +207,17 @@ dialog[open]::backdrop{opacity:1}
       <label for="fPessoa">Quem tem a consulta *</label>
       <select id="fPessoa"></select>
     </div>
+    <div id="campoContato" style="display:none">
+      <div class="subtitulo-campo">Contato do cliente</div>
+      <div class="linha-form">
+        <div>
+          <label for="fTelefone">Telefone</label>
+          <input id="fTelefone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(27) 99999-0000">
+        </div>
+      </div>
+      <label for="fEndereco" style="margin-top:12px">Endereço</label>
+      <input id="fEndereco" placeholder="Rua, número — bairro, cidade">
+    </div>
     <div id="campoValor">
       <label for="fValor">Valor (opcional)</label>
       <input id="fValor" placeholder="Ex.: 150,00">
@@ -268,10 +284,10 @@ const CONFIG = {
   categorias: [
     { id: "boletorecorrente", nome: "Boleto recorrente", cor: "#c62828", todoMes: true,  valor: true  },
     { id: "boletoesp",        nome: "Boleto esporádico", cor: "#e07b00", todoMes: false, valor: true  },
-    { id: "visita",           nome: "Visita a cliente",   cor: "#1e5aa8", todoMes: false, valor: false },
+    { id: "visita",           nome: "Visita a cliente",   cor: "#1e5aa8", todoMes: false, valor: false, contato: true },
     { id: "compromisso",      nome: "Compromisso",        cor: "#6a1b9a", todoMes: false, valor: false },
     { id: "compromissorecorrente", nome: "Compromisso recorrente", cor: "#546e7a", todoMes: true, valor: false },
-    { id: "retorno",          nome: "Retorno a cliente",  cor: "#2e7d32", todoMes: false, valor: false },
+    { id: "retorno",          nome: "Retorno a cliente",  cor: "#2e7d32", todoMes: false, valor: false, contato: true },
     { id: "consulta",         nome: "Consulta médica",    cor: "#00838f", todoMes: false, valor: false, pessoa: true },
   ],
   pessoas: ["Joceir Cipriano", "João Pedro", "Silvia Marcia", "Maria Margarida"],
@@ -526,9 +542,16 @@ function linhaDoDia(e, dataRef) {
   const acao = c.valor
     ? `<button onclick="alternarPago('${e.id}','${dataRef}')">${pago ? "↩ Desfazer" : "✔ Pago"}</button>`
     : heRecorrente(e) ? "" : `<button onclick="marcarFeito('${e.id}')">✔ Concluído</button>`;
+  /* cliente: telefone e endereço ficam tocáveis (liga / abre no mapa) */
+  const tel = (e.telefone || "").replace(/\D/g, "");
+  const contato = c.contato && (e.telefone || e.endereco)
+    ? `<div class="linha-contato">
+        ${tel ? `<a href="tel:${tel}">📞 ${escapar(e.telefone)}</a>` : ""}
+        ${e.endereco ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.endereco)}" target="_blank" rel="noopener">📍 ${escapar(e.endereco)}</a>` : ""}
+      </div>` : "";
   return `<div class="linha-evento${pago ? " pago" : atraso ? " atrasado" : ""}">
     <div class="ponto" style="background:${c.cor}"></div>
-    <div class="txt"><b>${e.importante ? "🔔 " : ""}${e.hora ? escapar(e.hora) + " — " : ""}${escapar(e.titulo)}</b><small>${c.nome}${e.obs ? " · " + escapar(e.obs) : ""}</small></div>
+    <div class="txt"><b>${e.importante ? "🔔 " : ""}${e.hora ? escapar(e.hora) + " — " : ""}${escapar(e.titulo)}</b><small>${c.nome}${e.obs ? " · " + escapar(e.obs) : ""}</small>${contato}</div>
     ${badges}
     <div class="acoes">
       <button onclick="editarEvento('${e.id}')">✏️ Editar</button>
@@ -665,12 +688,16 @@ function mudouTipo() {
   document.getElementById("campoData").style.display = c.todoMes ? "none" : "";
   document.getElementById("campoPessoa").style.display = c.pessoa ? "" : "none";
   document.getElementById("campoValor").style.display = c.valor ? "" : "none";
+  document.getElementById("campoContato").style.display = c.contato ? "" : "none";
 }
 function novoEvento(dataStr) {
   editandoId = null;
   document.getElementById("dlgTitulo").textContent = "Novo evento";
   document.getElementById("btnExcluir").style.display = "none";
   document.getElementById("formEvento").reset();
+  /* o padrão do formulário é "Compromisso": boleto é escolha explícita, senão
+     todo lembrete criado às pressas cai na conta errada e entra nas faturas */
+  document.getElementById("fTipo").value = "compromisso";
   document.getElementById("fData").value = dataStr || diaSelecionado || hojeStr();
   mudouTipo(); mudouImportante();
   document.getElementById("dlgEvento").showModal();
@@ -688,6 +715,8 @@ function editarEvento(id) {
   document.getElementById("fHora").value = e.hora || "";
   document.getElementById("fPessoa").value = e.pessoa || CONFIG.pessoas[0];
   document.getElementById("fValor").value = e.valor || "";
+  document.getElementById("fTelefone").value = e.telefone || "";
+  document.getElementById("fEndereco").value = e.endereco || "";
   document.getElementById("fObs").value = e.obs || "";
   document.getElementById("fImportante").checked = !!e.importante;
   document.getElementById("fAvisoDias").value = String(e.avisoDias ?? 0);
@@ -698,6 +727,7 @@ function salvarEvento(ev) {
   ev.preventDefault();
   const tipo = document.getElementById("fTipo").value;
   const c = cat(tipo);
+  const anterior = editandoId ? eventos.find(x => x.id === editandoId) : null;
   const base = {
     id: editandoId || uid(),
     tipo,
@@ -706,10 +736,14 @@ function salvarEvento(ev) {
     obs: document.getElementById("fObs").value.trim(),
     pessoa: c.pessoa ? document.getElementById("fPessoa").value : "",
     valor: c.valor ? document.getElementById("fValor").value.trim() : "",
+    telefone: c.contato ? document.getElementById("fTelefone").value.trim() : "",
+    endereco: c.contato ? document.getElementById("fEndereco").value.trim() : "",
     data: c.todoMes ? "" : document.getElementById("fData").value,
     diaMes: c.todoMes ? parseInt(document.getElementById("fDiaRec").value) || 1 : null,
     importante: document.getElementById("fImportante").checked,
     avisoDias: document.getElementById("fImportante").checked ? parseInt(document.getElementById("fAvisoDias").value) : null,
+    /* editar o boleto não pode apagar o que já foi pago */
+    pagos: anterior && Array.isArray(anterior.pagos) ? anterior.pagos : [],
   };
   if (!base.data && !c.todoMes) { alert("Informe a data do evento."); return; }
   if (editandoId) eventos = eventos.map(x => x.id === editandoId ? base : x);
@@ -1026,7 +1060,7 @@ function verificarAvisos() {
     avisosEnviados[chave] = Date.now();
     const c = cat(e.tipo);
     const quando = dias === 0 ? "é hoje" : `em ${dias} dia${dias > 1 ? "s" : ""}`;
-    const extra = [e.valor ? "R$ " + e.valor : "", e.pessoa ? e.pessoa : ""].filter(Boolean).join(" · ");
+    const extra = [e.valor ? "R$ " + e.valor : "", e.pessoa || "", e.telefone ? "tel. " + e.telefone : "", e.endereco || ""].filter(Boolean).join(" · ");
     try {
       new Notification("🔔 " + e.titulo, {
         body: c.nome + " — vence " + quando + (extra ? "\n" + extra : ""),
