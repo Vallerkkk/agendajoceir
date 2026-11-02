@@ -60,6 +60,23 @@ body.bloqueado>header,body.bloqueado>.intro,body.bloqueado>#resumo,body.bloquead
 @media(max-width:760px){@supports (padding: env(safe-area-inset-top)){body{padding-top:max(24px, env(safe-area-inset-top));padding-left:max(16px, env(safe-area-inset-left));padding-right:max(16px, env(safe-area-inset-right))}}}
 .chk{display:flex;align-items:center;gap:8px;cursor:pointer}
 .chk input{width:auto}
+/* Contas do mês: total, pago e o que falta */
+.contas{background:white;border:1px solid var(--borda);border-radius:22px;padding:20px 22px;margin-bottom:22px;box-shadow:0 6px 25px #24433204}
+.contas-cabeca{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px}
+.contas-cabeca h2{font-size:16px;letter-spacing:-.3px;margin:0}
+.contas-cabeca small{font-size:11px;color:var(--cinza)}
+.contas-numeros{display:flex;gap:10px;flex-wrap:wrap}
+.contas-num{flex:1;min-width:126px;border:1px solid var(--borda);border-radius:14px;padding:12px 14px;background:#fafcf9}
+.contas-num span{display:block;font-size:10px;font-weight:650;letter-spacing:.8px;text-transform:uppercase;color:#64796c}
+.contas-num b{display:block;font-size:22px;font-weight:600;letter-spacing:-1px;margin-top:6px}
+.contas-num.pago{background:#eef6ec;border-color:#cfe3cd}.contas-num.pago b{color:#2e7d32}
+.contas-num.falta{background:#fdeeee;border-color:#f2d4d4}.contas-num.falta b{color:var(--vermelho)}
+.barra{height:8px;border-radius:99px;background:#eef1ec;overflow:hidden;margin-top:14px}
+.barra i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#2e7d32,#69905a);transition:width .45s cubic-bezier(.16,1,.3,1)}
+.contas-rodape{font-size:11px;color:var(--cinza);margin-top:9px}
+.linha-evento.pago .txt b{text-decoration:line-through;color:#7c8a7f}
+.badge.ok{background:#e6f2e5;color:#2e7d32}
+@media(max-width:760px){.contas{padding:16px 14px}.contas-num{min-width:84px;padding:9px 10px}.contas-num b{font-size:17px}.contas-num span{font-size:9px}}
 /* Ficha do dia: abre ao clicar num dia do calendário */
 #dlgDia{width:min(94vw,560px)}
 .dia-cabeca{display:flex;align-items:center;gap:10px;padding:18px 20px;background:#f1f6ef;border-bottom:1px solid var(--borda)}
@@ -71,6 +88,9 @@ body.bloqueado>header,body.bloqueado>.intro,body.bloqueado>#resumo,body.bloquead
 .dia-resumo .pill{flex:1;min-width:92px;background:#fafcf9;border:1px solid var(--borda);border-radius:14px;padding:11px 12px}
 .dia-resumo .pill b{display:block;font-size:19px;font-weight:600;letter-spacing:-.8px;line-height:1.4}
 .dia-resumo .pill span{font-size:10px;color:#64796c;font-weight:600;letter-spacing:.3px;text-transform:uppercase}
+.dia-resumo .pill b small{font-size:11px;font-weight:600;color:#8a958d;letter-spacing:0}
+.dia-resumo .pill.ok{background:#eef6ec;border-color:#cfe3cd}
+.dia-resumo .pill.ok b{color:#2e7d32}
 .dia-lista{padding:0 20px;max-height:46dvh;overflow-y:auto}
 .grupo-hora{display:flex;align-items:center;gap:9px;margin:16px 0 0;font-size:10px;font-weight:650;letter-spacing:1px;text-transform:uppercase;color:#8a958d}
 .grupo-hora::after{content:"";flex:1;height:1px;background:#edf0eb}
@@ -89,6 +109,7 @@ body.bloqueado>header,body.bloqueado>.intro,body.bloqueado>#resumo,body.bloquead
 </header>
 <section class="intro"><div class="eyebrow">Visão geral</div><h2>Espaço para o que importa.</h2><p>Seus compromissos, contas e próximos passos em um só lugar.</p></section>
 <div id="resumo"></div>
+<section class="contas" id="contasMes" aria-live="polite"></section>
 <section class="agenda-shell" aria-label="Calendário de eventos">
 <div class="calendar-heading"><div><h2>Seu calendário</h2><p>Toque em um dia para abrir a ficha do dia.</p></div><div class="navegar"><button onclick="mudarMes(-1)" aria-label="Mês anterior">‹</button><strong id="tituloMes" aria-live="polite"></strong><button onclick="mudarMes(1)" aria-label="Próximo mês">›</button></div></div>
 <div class="filtros" id="filtros" aria-label="Filtrar por categoria"></div><div class="calendario" id="calendario"></div><div class="legenda" id="legenda"></div>
@@ -299,6 +320,42 @@ function cat(id) { return CONFIG.categorias.find(c => c.id === id) || CONFIG.cat
 function heRecorrente(e) { return !!(e && cat(e.tipo).todoMes); }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
+/* Data em que o evento cai num mês (pontual: a própria data; recorrente: o diaMes,
+   jogado para o último dia quando o mês é mais curto) */
+function ocorrenciaNoMes(e, ano, mes) {
+  if (!heRecorrente(e)) {
+    if (!e.data) return null;
+    const [a, m] = e.data.split("-").map(Number);
+    return (a === ano && m === mes) ? e.data : null;
+  }
+  const ultimo = new Date(ano, mes, 0).getDate();
+  const dia = Math.min(e.diaMes || 1, ultimo);
+  return `${ano}-${String(mes).padStart(2,"0")}-${String(dia).padStart(2,"0")}`;
+}
+function valorNum(e) { return parseFloat(String(e && e.valor || "0").replace(/\./g, "").replace(",", ".")) || 0; }
+function estaPago(e, dataOcorrencia) { return !!(e && e.pagos && e.pagos.includes(dataOcorrencia)); }
+function alternarPago(id, dataOcorrencia) {
+  const e = eventos.find(x => x.id === id); if (!e || !dataOcorrencia) return;
+  const jaEstava = estaPago(e, dataOcorrencia);
+  const pagos = (e.pagos || []).filter(d => d !== dataOcorrencia);
+  if (!jaEstava) pagos.push(dataOcorrencia);
+  e.pagos = pagos.sort();
+  gravar(); desenharTudo();
+  notificar(jaEstava ? "Pagamento desfeito." : "Pagamento registrado.");
+}
+/* Total, pago e em aberto das categorias com valor dentro de um mês */
+function contasDoMes(ano, mes) {
+  let total = 0, pago = 0, qtd = 0, qtdPago = 0;
+  eventos.filter(e => cat(e.tipo).valor).forEach(e => {
+    const oc = ocorrenciaNoMes(e, ano, mes); if (!oc) return;
+    const v = valorNum(e); if (!v) return;
+    total += v; qtd++;
+    if (estaPago(e, oc)) { pago += v; qtdPago++; }
+  });
+  return { total, pago, falta: total - pago, qtd, qtdPago };
+}
+function real(v) { return "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
 /* Eventos que caem num dia: pontuais + recorrentes gerados */
 function eventosDoDia(dataStr) {
   const [ano, mes, dia] = dataStr.split("-").map(Number);
@@ -367,6 +424,30 @@ function desenharResumo() {
   document.getElementById("resumo").innerHTML = html;
 }
 
+function linhaDoDia(e, dataRef) {
+  const c = cat(e.tipo);
+  const pago = estaPago(e, dataRef);
+  const badges = [
+    heRecorrente(e) ? `<span class="badge">todo dia ${e.diaMes}º</span>` : "",
+    e.pessoa ? `<span class="badge">👤 ${escapar(e.pessoa)}</span>` : "",
+    e.valor ? `<span class="badge${pago ? " ok" : ""}">${pago ? "✔ pago · " : ""}R$ ${escapar(e.valor)}</span>` : "",
+    e.importante ? `<span class="badge">🔔 aviso ${e.avisoDias ?? 0} dia(s) antes</span>` : "",
+  ].join("");
+  /* boleto: o botão registra o pagamento daquela ocorrência (sem apagar o evento) */
+  const acao = c.valor
+    ? `<button onclick="alternarPago('${e.id}','${dataRef}')">${pago ? "↩ Desfazer" : "✔ Pago"}</button>`
+    : heRecorrente(e) ? "" : `<button onclick="marcarFeito('${e.id}')">✔ Concluído</button>`;
+  return `<div class="linha-evento${pago ? " pago" : ""}">
+    <div class="ponto" style="background:${c.cor}"></div>
+    <div class="txt"><b>${e.importante ? "🔔 " : ""}${e.hora ? escapar(e.hora) + " — " : ""}${escapar(e.titulo)}</b><small>${c.nome}${e.obs ? " · " + escapar(e.obs) : ""}</small></div>
+    ${badges}
+    <div class="acoes">
+      <button onclick="editarEvento('${e.id}')">✏️ Editar</button>
+      ${acao}
+      <button onclick="excluirRapido('${e.id}')">🗑</button>
+    </div></div>`;
+}
+
 function desenharPainelDia() {
   const evs = eventosDoDia(diaSelecionado);
   const d = diaSelecionado.split("-");
@@ -374,26 +455,30 @@ function desenharPainelDia() {
   const tituloCap = titulo.charAt(0).toUpperCase() + titulo.slice(1);
   let html = `<div class="day-heading"><h2>${diaSelecionado === hojeStr() ? "Hoje · " : ""}${tituloCap}</h2><button onclick="novoEvento()">＋ Adicionar</button></div>`;
   if (!evs.length) html += `<div class="vazio-msg"><span class="empty-icon" aria-hidden="true">✓</span>Um dia com espaço livre.<br>Adicione um evento e organize seus próximos passos.</div>`;
-  evs.forEach(e => {
-    const c = cat(e.tipo);
-    const marca = heRecorrente(e) ? `<span class="badge">todo dia ${e.diaMes}º</span>` : "";
-    const pessoa = e.pessoa ? `<span class="badge">👤 ${escapar(e.pessoa)}</span>` : "";
-    const valor = e.valor ? `<span class="badge">R$ ${escapar(e.valor)}</span>` : "";
-    const importante = e.importante ? `<span class="badge">🔔 lembrete ${e.avisoDias ?? 0} dia(s) antes</span>` : "";
-    html += `<div class="linha-evento">
-      <div class="ponto" style="background:${c.cor}"></div>
-      <div class="txt"><b>${e.importante ? "🔔 " : ""}${e.hora ? escapar(e.hora)+" — " : ""}${escapar(e.titulo)}</b> <small>${c.nome}${e.obs ? " · " + escapar(e.obs) : ""}</small></div>
-      ${marca}${pessoa}${valor}${importante}
-      <div class="acoes">
-        <button onclick="editarEvento('${e.id}')">✏️ Editar</button>
-        ${heRecorrente(e) ? "" : `<button onclick="marcarFeito('${e.id}')">✔ Concluído</button>`}
-        <button onclick="excluirRapido('${e.id}')">🗑</button>
-      </div></div>`;
-  });
+  html += evs.map(e => linhaDoDia(e, diaSelecionado)).join("");
   document.getElementById("painelDia").innerHTML = html;
 }
 
-function desenharTudo() { desenharLegenda(); desenharFiltros(); desenharCalendario(); desenharResumo(); desenharPainelDia(); if (document.getElementById("dlgDia").open) desenharFichaDia(); }
+function desenharContasMes() {
+  const ano = mesAtual.getFullYear(), mes = mesAtual.getMonth() + 1;
+  const c = contasDoMes(ano, mes);
+  const pct = c.total ? Math.round((c.pago / c.total) * 100) : 0;
+  const nomeMes = mesAtual.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  document.getElementById("contasMes").innerHTML =
+    `<div class="contas-cabeca"><h2>Contas de ${nomeMes}</h2><small>${c.qtd} boleto(s) no mês</small></div>
+     <div class="contas-numeros">
+       <div class="contas-num"><span>Total do mês</span><b>${real(c.total)}</b></div>
+       <div class="contas-num pago"><span>Pago</span><b>${real(c.pago)}</b></div>
+       <div class="contas-num falta"><span>Falta pagar</span><b>${real(c.falta)}</b></div>
+     </div>
+     <div class="barra" role="img" aria-label="${pct}% pago"><i style="width:${pct}%"></i></div>
+     <div class="contas-rodape">${c.qtd ? `${c.qtdPago} de ${c.qtd} pagos (${pct}%).` : "Nenhum boleto com valor neste mês."} Toque no dia e use “✔ Pago” para baixar uma conta.</div>`;
+}
+
+function desenharTudo() {
+  desenharLegenda(); desenharFiltros(); desenharCalendario(); desenharResumo(); desenharContasMes(); desenharPainelDia();
+  if (document.getElementById("dlgDia").open) desenharFichaDia();
+}
 
 /* ============================================================
    FICHA DO DIA — o que o dia terá, aberto ao clicar no calendário
@@ -403,25 +488,6 @@ const GRUPO_PERIODO = [
   { nome: "Tarde", de: 12, ate: 18 },
   { nome: "Noite", de: 18, ate: 24 },
 ];
-
-function linhaDoDia(e) {
-  const c = cat(e.tipo);
-  const badges = [
-    heRecorrente(e) ? `<span class="badge">todo dia ${e.diaMes}º</span>` : "",
-    e.pessoa ? `<span class="badge">👤 ${escapar(e.pessoa)}</span>` : "",
-    e.valor ? `<span class="badge">R$ ${escapar(e.valor)}</span>` : "",
-    e.importante ? `<span class="badge">🔔 aviso ${e.avisoDias ?? 0} dia(s) antes</span>` : "",
-  ].join("");
-  return `<div class="linha-evento">
-    <div class="ponto" style="background:${c.cor}"></div>
-    <div class="txt"><b>${e.importante ? "🔔 " : ""}${e.hora ? escapar(e.hora) + " — " : ""}${escapar(e.titulo)}</b><small>${c.nome}${e.obs ? " · " + escapar(e.obs) : ""}</small></div>
-    ${badges}
-    <div class="acoes">
-      <button onclick="editarEvento('${e.id}')">✏️ Editar</button>
-      ${heRecorrente(e) ? "" : `<button onclick="marcarFeito('${e.id}')">✔ Concluído</button>`}
-      <button onclick="excluirRapido('${e.id}')">🗑</button>
-    </div></div>`;
-}
 
 function desenharFichaDia() {
   const evs = eventosDoDia(diaSelecionado);
@@ -435,11 +501,13 @@ function desenharFichaDia() {
 
   const comHora = evs.filter(e => e.hora).length;
   const avisos = evs.filter(e => e.importante).length;
-  const total = evs.reduce((s, e) => s + (parseFloat(String(e.valor || "0").replace(",", ".")) || 0), 0);
+  const contas = evs.filter(e => cat(e.tipo).valor);
+  const total = contas.reduce((s, e) => s + valorNum(e), 0);
+  const pago = contas.filter(e => estaPago(e, diaSelecionado)).reduce((s, e) => s + valorNum(e), 0);
   let pills = `<div class="pill"><b>${String(evs.length).padStart(2, "0")}</b><span>No dia</span></div>
     <div class="pill"><b>${String(comHora).padStart(2, "0")}</b><span>Com hora</span></div>
     <div class="pill"><b>${String(avisos).padStart(2, "0")}</b><span>Com aviso</span></div>
-    <div class="pill"><b>${total ? "R$ " + total.toFixed(2).replace(".", ",") : "—"}</b><span>Em contas</span></div>`;
+    <div class="pill${total && pago === total ? " ok" : ""}"><b>${total ? real(pago) + " <small>de " + real(total) + "</small>" : "—"}</b><span>Contas do dia</span></div>`;
   document.getElementById("dlgDiaResumo").innerHTML = pills;
 
   if (!evs.length) {
@@ -454,16 +522,16 @@ function desenharFichaDia() {
   GRUPO_PERIODO.forEach(g => {
     const doGrupo = comHoraLista.filter(e => { const h = parseInt(e.hora.slice(0, 2)); return h >= g.de && h < g.ate; });
     if (!doGrupo.length) return;
-    html += `<div class="grupo-hora">${g.nome}</div>` + doGrupo.map(linhaDoDia).join("");
+    html += `<div class="grupo-hora">${g.nome}</div>` + doGrupo.map(e => linhaDoDia(e, diaSelecionado)).join("");
   });
-  if (semHora.length) html += `<div class="grupo-hora">Sem horário definido</div>` + semHora.map(linhaDoDia).join("");
+  if (semHora.length) html += `<div class="grupo-hora">Sem horário definido</div>` + semHora.map(e => linhaDoDia(e, diaSelecionado)).join("");
   document.getElementById("dlgDiaLista").innerHTML = html;
 }
 
 /* ============================================================
    AÇÕES
    ============================================================ */
-function mudarMes(delta) { mesAtual.setMonth(mesAtual.getMonth() + delta); desenharCalendario(); animar("calendario"); }
+function mudarMes(delta) { mesAtual.setMonth(mesAtual.getMonth() + delta); desenharCalendario(); desenharContasMes(); animar("calendario"); }
 function irParaHoje() { mesAtual = new Date(); mesAtual.setDate(1); diaSelecionado = hojeStr(); desenharTudo(); }
 function abrirDia(dataStr) {
   diaSelecionado = dataStr;
