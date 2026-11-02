@@ -20,9 +20,11 @@ const VAPID_PRIVADA = process.env.VAPID_PRIVATE_KEY || null;
 const VAPID_CONTATO = process.env.VAPID_SUBJECT || "mailto:agenda@joceir.local";
 const CRON_TOKEN = process.env.CRON_TOKEN || null;
 
-const EMAIL_PARA = process.env.EMAIL_PARA || null;   /* ex.: joceircipriano@gmail.com */
+const EMAIL_PARA = (process.env.EMAIL_PARA || "").split(/[,;]/).map(s => s.trim()).filter(Boolean);
 const EMAIL_DESDE = process.env.EMAIL_DESDE || "joceiragenda@gmail.com";
 const BREVO_API_KEY = process.env.BREVO_API_KEY || null; /* envia por HTTPS — funciona no Render grátis */
+const SMS_PARA = (process.env.SMS_PARA || "").split(/[,;]/).map(s => s.trim()).filter(Boolean);
+const SMS_REMETENTE = process.env.SMS_REMETENTE || "AgendaJS"; /* nome aprovado na Brevo para SMS */
 const SMTP_HOST = process.env.SMTP_HOST || null;     /* ex.: smtp.gmail.com */
 const SMTP_PORT = process.env.SMTP_PORT || "465";
 const SMTP_USUARIO = process.env.SMTP_USUARIO || null;
@@ -261,7 +263,7 @@ app.delete("/api/inscricoes", exigirSessao, async (req, res) => {
   }
 });
 
-/* Chamado uma vez por dia pelo agendador externo (cron) às 09:00 de Brasília. */
+/* Chamado pelo agendador externo (cron) às 09:00 e às 15:00 de Brasília. */
 
 function hojeSaoPaulo() {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date());
@@ -284,10 +286,16 @@ function resumoDoDia(rows, hoje) {
   }).join("\n");
 }
 
-async function enviarEmail(resumo, hoje) {
+const MSG = {
+  manha: { saudacao: "Bom dia", tag: "agenda-manha" },
+  tarde: { saudacao: "Boa tarde", tag: "agenda-tarde" },
+};
+const frase = m => m.saudacao + " Joceir, cheque a agenda.";
+
+async function enviarEmail(resumo, hoje, m) {
   const dataBR = hoje.split("-").reverse().join("/");
-  const assunto = "Checar agenda! (" + dataBR + ")";
-  const texto = "Checar agenda!\n\nBom dia! Sua agenda de " + dataBR + ":\n"
+  const assunto = frase(m) + " (" + dataBR + ")";
+  const texto = frase(m) + "\n\nSua agenda de " + dataBR + ":\n"
     + resumo + "\n\nAbrir agenda: " + SITE_URL + "\n";
 
   if (BREVO_API_KEY) {
@@ -297,7 +305,7 @@ async function enviarEmail(resumo, hoje) {
       headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
         sender: { name: "Agenda J&S", email: EMAIL_DESDE },
-        to: [{ email: EMAIL_PARA }],
+        to: EMAIL_PARA.map(e => ({ email: e })),
         subject: assunto,
         textContent: texto,
       }),
@@ -315,10 +323,24 @@ async function enviarEmail(resumo, hoje) {
   });
   await transportador.sendMail({
     from: '"Agenda J&S" <' + SMTP_USUARIO + ">",
-    to: EMAIL_PARA,
+    to: EMAIL_PARA.join(","),
     subject: assunto,
     text: texto,
   });
+}
+
+async function enviarSMS(m) {
+  const resp = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+    method: "POST",
+    headers: { "api-key": BREVO_API_KEY, "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ sender: SMS_REMETENTE, sms: frase(m), recipients: SMS_PARA }),
+  });
+  const corpo = await resp.text().catch(() => "");
+  if (!resp.ok) throw new Error("Brevo " + resp.status + ": " + corpo);
+  let lista;
+  try { lista = JSON.parse(corpo); } catch { lista = null; }
+  const ruins = (Array.isArray(lista) ? lista : []).filter(x => x.status && x.status !== "success");
+  if (ruins.length) throw new Error(ruins.map(x => x.errorCode + " " + x.message).join("; "));
 }
 
 app.post("/api/despacho", async (req, res) => {
@@ -329,11 +351,12 @@ app.post("/api/despacho", async (req, res) => {
     if (!VAPID_PUBLICA || !VAPID_PRIVADA)
       return res.status(503).json({ erro: "chaves VAPID não configuradas" });
 
+    const m = MSG[(req.body && req.body.periodo) || req.query.periodo || "manha"] || MSG.manha;
     const linhas = await sbFetch("agenda_push?select=endpoint,dados");
     const corpo = JSON.stringify({
       title: "Agenda J&S",
-      body: "Bom dia! Hora de checar a agenda de hoje.",
-      tag: "agenda-diaria",
+      body: frase(m),
+      tag: m.tag,
       data: { url: "/" },
     });
 
@@ -354,18 +377,28 @@ app.post("/api/despacho", async (req, res) => {
       }
     }
     let email = "nao configurado";
-    if (EMAIL_PARA && (BREVO_API_KEY || (SMTP_HOST && SMTP_USUARIO && SMTP_SENHA))) {
+    if (EMAIL_PARA.length && (BREVO_API_KEY || (SMTP_HOST && SMTP_USUARIO && SMTP_SENHA))) {
       try {
         const eventos = await listarEventos();
-        await enviarEmail(resumoDoDia(eventos, hojeSaoPaulo()), hojeSaoPaulo());
+        await enviarEmail(resumoDoDia(eventos, hojeSaoPaulo()), hojeSaoPaulo(), m);
         email = "enviado";
       } catch (e) {
         console.error("email falhou:", e.message);
-        email = "erro";
+        email = "erro: " + e.message;
+      }
+    }
+    let sms = "nao configurado";
+    if (BREVO_API_KEY && SMS_PARA.length) {
+      try {
+        await enviarSMS(m);
+        sms = "enviado";
+      } catch (e) {
+        console.error("sms falhou:", e.message);
+        sms = "erro: " + e.message;
       }
     }
 
-    res.json({ total: (linhas || []).length, enviados, mortas, falhas, email });
+    res.json({ total: (linhas || []).length, enviados, mortas, falhas, email, sms });
   } catch (e) {
     console.error(e);
     res.status(502).json({ erro: "Falha no disparo" });
