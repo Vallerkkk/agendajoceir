@@ -7,6 +7,7 @@ const express = require("express");
 const path = require("path");
 const crypto = require("crypto");
 const webpush = require("web-push");
+const nodemailer = require("nodemailer");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,6 +19,13 @@ const VAPID_PUBLICA = process.env.VAPID_PUBLIC_KEY || null;
 const VAPID_PRIVADA = process.env.VAPID_PRIVATE_KEY || null;
 const VAPID_CONTATO = process.env.VAPID_SUBJECT || "mailto:agenda@joceir.local";
 const CRON_TOKEN = process.env.CRON_TOKEN || null;
+
+const EMAIL_PARA = process.env.EMAIL_PARA || null;   /* ex.: joceircipriano@gmail.com */
+const SMTP_HOST = process.env.SMTP_HOST || null;     /* ex.: smtp.gmail.com */
+const SMTP_PORT = process.env.SMTP_PORT || "465";
+const SMTP_USUARIO = process.env.SMTP_USUARIO || null;
+const SMTP_SENHA = process.env.SMTP_SENHA || null;   /* senha de app (Gmail) ou chave SMTP (Brevo) */
+const SITE_URL = process.env.SITE_URL || "https://agendajoceir.onrender.com";
 
 if (VAPID_PUBLICA && VAPID_PRIVADA) {
   webpush.setVapidDetails(VAPID_CONTATO, VAPID_PUBLICA, VAPID_PRIVADA);
@@ -252,6 +260,43 @@ app.delete("/api/inscricoes", exigirSessao, async (req, res) => {
 });
 
 /* Chamado uma vez por dia pelo agendador externo (cron) às 09:00 de Brasília. */
+
+function hojeSaoPaulo() {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date());
+}
+
+const NOMES_CAT = {
+  boletorecorrente: "Boleto recorrente", boletoesp: "Boleto esporádico", visita: "Visita a cliente",
+  compromisso: "Compromisso", retorno: "Retorno a cliente", consulta: "Consulta médica",
+};
+
+function resumoDoDia(rows, hoje) {
+  const dia = Number(hoje.slice(8, 10));
+  const doDia = (rows || []).map(r => r.dados).filter(e =>
+    e.tipo === "boletorecorrente" ? Number(e.diaMes) === dia : e.data === hoje
+  );
+  if (!doDia.length) return "Nenhum evento para hoje.";
+  return doDia.map(e => {
+    const extra = [e.valor ? "R$ " + e.valor : "", e.pessoa || ""].filter(Boolean).join(" · ");
+    return "- " + (NOMES_CAT[e.tipo] || e.tipo) + ": " + e.titulo + (extra ? " (" + extra + ")" : "");
+  }).join("\n");
+}
+
+async function enviarEmail(resumo, hoje) {
+  const transportador = nodemailer.createTransport({
+    host: SMTP_HOST, port: Number(SMTP_PORT), secure: String(SMTP_PORT) === "465",
+    auth: { user: SMTP_USUARIO, pass: SMTP_SENHA },
+  });
+  const dataBR = hoje.split("-").reverse().join("/");
+  await transportador.sendMail({
+    from: '"Agenda J&S" <' + SMTP_USUARIO + ">",
+    to: EMAIL_PARA,
+    subject: "Bom dia! Sua agenda de " + dataBR,
+    text: "Bom dia! Hora de checar a agenda de hoje (" + dataBR + ").\n\n"
+      + resumo + "\n\nAbrir agenda: " + SITE_URL + "\n",
+  });
+}
+
 app.post("/api/despacho", async (req, res) => {
   try {
     if (!CRON_TOKEN) return res.status(503).json({ erro: "CRON_TOKEN não configurado" });
@@ -284,7 +329,19 @@ app.post("/api/despacho", async (req, res) => {
         }
       }
     }
-    res.json({ total: (linhas || []).length, enviados, mortas, falhas });
+    let email = "nao configurado";
+    if (EMAIL_PARA && SMTP_HOST && SMTP_USUARIO && SMTP_SENHA) {
+      try {
+        const eventos = await listarEventos();
+        await enviarEmail(resumoDoDia(eventos, hojeSaoPaulo()), hojeSaoPaulo());
+        email = "enviado";
+      } catch (e) {
+        console.error("email falhou:", e.message);
+        email = "erro";
+      }
+    }
+
+    res.json({ total: (linhas || []).length, enviados, mortas, falhas, email });
   } catch (e) {
     console.error(e);
     res.status(502).json({ erro: "Falha no disparo" });
