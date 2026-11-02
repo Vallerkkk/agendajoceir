@@ -299,11 +299,72 @@ const MSG = {
 };
 const frase = m => m.saudacao + " Joceir, cheque a agenda.";
 
-async function enviarEmail(resumo, hoje, m) {
+/* ---------- boletos em atraso (mesma regra do index.html) ---------- */
+const CAT_COM_VALOR = new Set(["boletorecorrente", "boletoesp"]);
+const valorNum = v => parseFloat(String(v || "0").replace(/\./g, "").replace(",", ".")) || 0;
+const reais = v => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pagoEm = (e, data) => !!(e && Array.isArray(e.pagos) && e.pagos.includes(data));
+
+/* Data em que o evento vence num mês (recorrente: diaMes, recuado para o último
+   dia quando o mês é mais curto; pontual: a própria data, só naquele mês) */
+function ocorrenciaNoMes(e, ano, mes) {
+  if (e.diaMes) {
+    const ultimo = new Date(ano, mes, 0).getDate();
+    const dia = Math.min(Number(e.diaMes) || 1, ultimo);
+    return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+  }
+  if (!e.data) return null;
+  const [a, m] = e.data.split("-").map(Number);
+  return (a === ano && m === mes) ? e.data : null;
+}
+
+/* Vencimento já passado (hoje ou antes) mais recente do evento.
+   Pontual vence uma única vez e continua em atraso até ser pago;
+   recorrente retrocede mês a mês até achar a ocorrência vencida mais recente. */
+function ultimoVencimento(e, hoje) {
+  if (!e.diaMes) return e.data && e.data <= hoje ? e.data : null;
+  const [ano, mes] = hoje.split("-").map(Number);
+  for (let k = 0; k < 12; k++) {
+    const d = new Date(ano, mes - k, 0);
+    const oc = ocorrenciaNoMes(e, d.getFullYear(), d.getMonth() + 1);
+    if (oc && oc <= hoje) return oc;
+  }
+  return null;
+}
+
+function diasCorridos(de, ate) {
+  return Math.round((new Date(ate + "T12:00:00Z") - new Date(de + "T12:00:00Z")) / 86400000);
+}
+
+function atrasosDoDia(rows, hoje) {
+  return (rows || []).map(r => r.dados)
+    .filter(e => e && CAT_COM_VALOR.has(e.tipo) && valorNum(e.valor))
+    .map(e => {
+      const venc = ultimoVencimento(e, hoje);
+      if (!venc || pagoEm(e, venc)) return null;
+      const dias = diasCorridos(venc, hoje);
+      return dias > 0 ? { titulo: e.titulo, valor: valorNum(e.valor), venc, dias } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.dias - a.dias);
+}
+
+function textoAtrasos(atrasos) {
+  if (!atrasos.length) return "";
+  const total = atrasos.reduce((s, a) => s + a.valor, 0);
+  const linhas = atrasos.map(a =>
+    "- " + a.titulo + ": " + a.dias + " dia" + (a.dias > 1 ? "s" : "") + " de atraso (" +
+    reais(a.valor) + ", venceu em " + a.venc.split("-").reverse().join("/") + ")"
+  ).join("\n");
+  return "\n\nBoletos em atraso (" + atrasos.length + "):\n" + linhas +
+    "\nTotal em atraso: " + reais(total) + "\n";
+}
+
+async function enviarEmail(resumo, hoje, m, atrasosTxt) {
   const dataBR = hoje.split("-").reverse().join("/");
-  const assunto = frase(m) + " (" + dataBR + ")";
+  const assunto = frase(m) + (atrasosTxt ? " — ⚠️ boletos em atraso" : "") + " (" + dataBR + ")";
   const texto = frase(m) + "\n\nSua agenda de " + dataBR + ":\n"
-    + resumo + "\n\nAbrir agenda: " + SITE_URL + "\n";
+    + resumo + (atrasosTxt || "") + "\n\nAbrir agenda: " + SITE_URL + "\n";
 
   if (BREVO_API_KEY) {
     /* API por HTTPS: funciona no plano gratuito do Render, que bloqueia SMTP */
@@ -336,9 +397,17 @@ async function enviarEmail(resumo, hoje, m) {
   });
 }
 
-async function enviarSMS(m) {
+/* Frase curta para push/SMS: só o essencial do atraso (limite de caracteres) */
+function avisoAtraso(atrasos) {
+  if (!atrasos.length) return "";
+  const total = atrasos.reduce((s, a) => s + a.valor, 0);
+  return " ⚠️ " + atrasos.length + " boleto(s) em atraso (" + reais(total) +
+    "), o mais antigo há " + atrasos[0].dias + (atrasos[0].dias > 1 ? " dias" : " dia") + ".";
+}
+
+async function enviarSMS(m, aviso) {
   /* a API da Brevo aceita um destino por chamada (campo "recipient", não array) */
-  const base = { sender: SMS_REMETENTE, content: frase(m) + " " + SITE_URL, type: "transactional" };
+  const base = { sender: SMS_REMETENTE, content: (frase(m) + aviso + " " + SITE_URL).trim(), type: "transactional" };
   const erros = [];
   for (const numero of SMS_PARA) {
     const resp = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
@@ -365,10 +434,14 @@ app.post("/api/despacho", async (req, res) => {
       return res.status(503).json({ erro: "chaves VAPID não configuradas" });
 
     const m = MSG[(req.body && req.body.periodo) || req.query.periodo || "manha"] || MSG.manha;
+    const hoje = hojeSaoPaulo();
+    const eventos = await listarEventos().catch(e => { console.error("leitura de eventos falhou:", e.message); return []; });
+    const atrasos = atrasosDoDia(eventos, hoje);
+    const aviso = avisoAtraso(atrasos);
     const linhas = await sbFetch("agenda_push?select=endpoint,dados");
     const corpo = JSON.stringify({
       title: "Agenda J&S",
-      body: frase(m),
+      body: frase(m) + aviso,
       tag: m.tag,
       data: { url: "/" },
     });
@@ -392,8 +465,7 @@ app.post("/api/despacho", async (req, res) => {
     let email = "nao configurado";
     if (EMAIL_PARA.length && (BREVO_API_KEY || (SMTP_HOST && SMTP_USUARIO && SMTP_SENHA))) {
       try {
-        const eventos = await listarEventos();
-        await enviarEmail(resumoDoDia(eventos, hojeSaoPaulo()), hojeSaoPaulo(), m);
+        await enviarEmail(resumoDoDia(eventos, hoje), hoje, m, textoAtrasos(atrasos));
         email = "enviado";
       } catch (e) {
         console.error("email falhou:", e.message);
@@ -403,7 +475,7 @@ app.post("/api/despacho", async (req, res) => {
     let sms = "nao configurado";
     if (BREVO_API_KEY && SMS_PARA.length) {
       try {
-        await enviarSMS(m);
+        await enviarSMS(m, aviso);
         sms = "enviado";
       } catch (e) {
         console.error("sms falhou:", e.message);
@@ -420,5 +492,8 @@ app.post("/api/despacho", async (req, res) => {
 
 /* ---------- site estático ---------- */
 app.use(express.static(path.join(__dirname)));
+
+/* funções puras de atraso, exportadas para teste local (node -e "require('./server.js')") */
+module.exports = { atrasosDoDia, textoAtrasos, avisoAtraso, ultimoVencimento };
 
 app.listen(PORT, () => console.log("Agenda do Joceir rodando na porta " + PORT));

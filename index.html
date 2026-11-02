@@ -76,7 +76,17 @@ body.bloqueado>header,body.bloqueado>.intro,body.bloqueado>#resumo,body.bloquead
 .contas-rodape{font-size:11px;color:var(--cinza);margin-top:9px}
 .linha-evento.pago .txt b{text-decoration:line-through;color:#7c8a7f}
 .badge.ok{background:#e6f2e5;color:#2e7d32}
-@media(max-width:760px){.contas{padding:16px 14px}.contas-num{min-width:84px;padding:9px 10px}.contas-num b{font-size:17px}.contas-num span{font-size:9px}}
+.badge.atraso{background:#fdeaea;color:#b3261e;font-weight:650}
+.linha-evento.atrasado{background:#fffbfa}
+.contas-atraso{margin-top:18px;padding-top:4px;border-top:1px dashed #f0d3d3}
+.contas-atraso .contas-cabeca{margin-top:12px}
+.contas-atraso .contas-cabeca h2{color:#b3261e;font-size:14px}
+.linha-atraso{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f4f5f2}
+.linha-atraso .txt{flex:1;min-width:0}
+.linha-atraso .txt b{display:block;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.linha-atraso .txt small{font-size:11px;color:var(--cinza)}
+.linha-atraso button{white-space:nowrap}
+@media(max-width:760px){.contas{padding:16px 14px}.contas-num{min-width:84px;padding:9px 10px}.contas-num b{font-size:17px}.contas-num span{font-size:9px}.linha-atraso{flex-wrap:wrap}.linha-atraso .txt{flex:1 1 100%}}
 /* Ficha do dia: abre ao clicar num dia do calendário */
 #dlgDia{width:min(94vw,560px)}
 .dia-cabeca{display:flex;align-items:center;gap:10px;padding:18px 20px;background:#f1f6ef;border-bottom:1px solid var(--borda)}
@@ -355,6 +365,29 @@ function contasDoMes(ano, mes) {
   return { total, pago, falta: total - pago, qtd, qtdPago };
 }
 function real(v) { return "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function dataBR(d) { return d.split("-").reverse().join("/"); }
+
+/* Vencimento já passado mais recente do evento: pontual vence uma vez e continua
+   devendo; recorrente retrocede mês a mês até a ocorrência vencida mais nova */
+function ultimoVencimento(e, hoje) {
+  if (!heRecorrente(e)) return e.data && e.data <= hoje ? e.data : null;
+  const [ano, mes] = hoje.split("-").map(Number);
+  for (let k = 0; k < 12; k++) {
+    const d = new Date(ano, mes - k, 0);
+    const oc = ocorrenciaNoMes(e, d.getFullYear(), d.getMonth() + 1);
+    if (oc && oc <= hoje) return oc;
+  }
+  return null;
+}
+/* Contas com valor vencidas e sem pagamento registrado, da mais antiga para a mais nova */
+function atrasosEm(hoje) {
+  return eventos.filter(e => cat(e.tipo).valor && valorNum(e)).map(e => {
+    const venc = ultimoVencimento(e, hoje);
+    if (!venc || estaPago(e, venc)) return null;
+    const dias = diasAte(venc, hoje);
+    return dias > 0 ? { evento: e, venc, dias, valor: valorNum(e) } : null;
+  }).filter(Boolean).sort((a, b) => b.dias - a.dias);
+}
 
 /* Eventos que caem num dia: pontuais + recorrentes gerados */
 function eventosDoDia(dataStr) {
@@ -427,17 +460,19 @@ function desenharResumo() {
 function linhaDoDia(e, dataRef) {
   const c = cat(e.tipo);
   const pago = estaPago(e, dataRef);
+  const atraso = c.valor && !pago && dataRef < hojeStr() ? diasAte(dataRef, hojeStr()) : 0;
   const badges = [
     heRecorrente(e) ? `<span class="badge">todo dia ${e.diaMes}º</span>` : "",
     e.pessoa ? `<span class="badge">👤 ${escapar(e.pessoa)}</span>` : "",
-    e.valor ? `<span class="badge${pago ? " ok" : ""}">${pago ? "✔ pago · " : ""}R$ ${escapar(e.valor)}</span>` : "",
+    e.valor ? `<span class="badge${pago ? " ok" : atraso ? " atraso" : ""}">${pago ? "✔ pago · " : ""}R$ ${escapar(e.valor)}</span>` : "",
+    atraso ? `<span class="badge atraso">⚠ ${atraso} dia${atraso > 1 ? "s" : ""} em atraso</span>` : "",
     e.importante ? `<span class="badge">🔔 aviso ${e.avisoDias ?? 0} dia(s) antes</span>` : "",
   ].join("");
   /* boleto: o botão registra o pagamento daquela ocorrência (sem apagar o evento) */
   const acao = c.valor
     ? `<button onclick="alternarPago('${e.id}','${dataRef}')">${pago ? "↩ Desfazer" : "✔ Pago"}</button>`
     : heRecorrente(e) ? "" : `<button onclick="marcarFeito('${e.id}')">✔ Concluído</button>`;
-  return `<div class="linha-evento${pago ? " pago" : ""}">
+  return `<div class="linha-evento${pago ? " pago" : atraso ? " atrasado" : ""}">
     <div class="ponto" style="background:${c.cor}"></div>
     <div class="txt"><b>${e.importante ? "🔔 " : ""}${e.hora ? escapar(e.hora) + " — " : ""}${escapar(e.titulo)}</b><small>${c.nome}${e.obs ? " · " + escapar(e.obs) : ""}</small></div>
     ${badges}
@@ -464,7 +499,9 @@ function desenharContasMes() {
   const c = contasDoMes(ano, mes);
   const pct = c.total ? Math.round((c.pago / c.total) * 100) : 0;
   const nomeMes = mesAtual.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  document.getElementById("contasMes").innerHTML =
+  const atr = atrasosEm(hojeStr());
+  const totalAtraso = atr.reduce((s, a) => s + a.valor, 0);
+  let html =
     `<div class="contas-cabeca"><h2>Contas de ${nomeMes}</h2><small>${c.qtd} boleto(s) no mês</small></div>
      <div class="contas-numeros">
        <div class="contas-num"><span>Total do mês</span><b>${real(c.total)}</b></div>
@@ -473,6 +510,17 @@ function desenharContasMes() {
      </div>
      <div class="barra" role="img" aria-label="${pct}% pago"><i style="width:${pct}%"></i></div>
      <div class="contas-rodape">${c.qtd ? `${c.qtdPago} de ${c.qtd} pagos (${pct}%).` : "Nenhum boleto com valor neste mês."} Toque no dia e use “✔ Pago” para baixar uma conta.</div>`;
+  if (atr.length) {
+    html += `<div class="contas-atraso">
+      <div class="contas-cabeca"><h2>⚠️ Em atraso</h2><small>${atr.length} conta(s) · ${real(totalAtraso)}</small></div>
+      ${atr.map(a => `<div class="linha-atraso">
+        <div class="txt"><b>${escapar(a.evento.titulo)}</b><small>${cat(a.evento.tipo).nome} · venceu em ${dataBR(a.venc)} · há ${a.dias} dia${a.dias > 1 ? "s" : ""}</small></div>
+        <span class="badge atraso">${real(a.valor)}</span>
+        <button onclick="alternarPago('${a.evento.id}','${a.venc}')">✔ Pagar</button>
+      </div>`).join("")}
+    </div>`;
+  }
+  document.getElementById("contasMes").innerHTML = html;
 }
 
 function desenharTudo() {
@@ -891,6 +939,20 @@ function verificarAvisos() {
     avisosEnviados[chaveDia] = Date.now();
     localStorage.setItem(AVISOS_CHAVE, JSON.stringify(avisosEnviados));
     try { new Notification("🔔 Agenda J&S", { body: "Hora de checar a agenda de hoje.", tag: "agenda-diaria" }); } catch {}
+  }
+  /* Atrasos: um aviso por dia enquanto houver conta vencida sem pagamento */
+  const atr = atrasosEm(hoje);
+  if (atr.length) {
+    const chaveAtraso = "atraso@" + hoje;
+    if (!avisosEnviados[chaveAtraso]) {
+      avisosEnviados[chaveAtraso] = Date.now();
+      localStorage.setItem(AVISOS_CHAVE, JSON.stringify(avisosEnviados));
+      const maior = atr[0];
+      const total = atr.reduce((s, a) => s + a.valor, 0);
+      const corpo = `${atr.length} conta(s) em atraso (${real(total)}) — ${maior.evento.titulo} há ${maior.dias} dia${maior.dias > 1 ? "s" : ""}.`;
+      try { new Notification("⚠️ Boletos em atraso", { body: corpo, tag: "agenda-atraso" }); } catch {}
+      notificar("⚠️ " + corpo);
+    }
   }
   eventos.filter(e => e.importante).forEach(e => {
     const ocorrencia = proximaOcorrencia(e, hoje);
