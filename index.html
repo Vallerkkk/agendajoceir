@@ -717,6 +717,8 @@ atualizarBotaoSino();
 /* Webapp instalável (iPhone: Compartilhar → Adicionar à Tela de Início) */
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
+  /* Aparelhos que já permitiram avisos se cadastram sozinhos, mesmo sem login */
+  if ("Notification" in window && Notification.permission === "granted") inscreverPush();
 }
 </script>
 </body>

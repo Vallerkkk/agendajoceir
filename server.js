@@ -203,10 +203,14 @@ app.get("/api/push-chave", (req, res) => {
   res.json({ publicKey: VAPID_PUBLICA, pronta: !!(VAPID_PUBLICA && VAPID_PRIVADA) });
 });
 
-app.post("/api/inscricoes", exigirSessao, async (req, res) => {
+/* Inscrição é pública: o lembrete das 09:00 não contém dados da agenda,
+   então qualquer aparelho pode se cadastrar mesmo sem ter entrado. */
+app.post("/api/inscricoes", async (req, res) => {
   try {
     const s = req.body || {};
-    if (!/^https:\/\//.test(s.endpoint || "") || !s.keys || !s.keys.p256dh || !s.keys.auth)
+    if (typeof s.endpoint !== "string" || s.endpoint.length > 2000)
+      return res.status(400).json({ erro: "inscrição inválida" });
+    if (!/^https:\/\//.test(s.endpoint) || !s.keys || !s.keys.p256dh || !s.keys.auth)
       return res.status(400).json({ erro: "inscrição inválida" });
     await sbFetch("agenda_push?on_conflict=endpoint", {
       method: "POST",
