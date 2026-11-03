@@ -548,10 +548,12 @@ function desenharResumo() {
     const d = new Date(); d.setDate(d.getDate()+i);
     semana.push(...eventosDoDia(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`));
   }
-  const recorrentesMes = eventos.filter(e => heRecorrente(e) && (!filtro || e.tipo === filtro));
+  /* só entra aqui o que é conta de verdade (categoria com valor) —
+     compromisso recorrente também é recorrente, mas não é boleto */
+  const boletos = eventos.filter(e => cat(e.tipo).valor && (!filtro || e.tipo === filtro));
   let html = `<div class="stat"><span class="stat-icon" aria-hidden="true">◎</span><div class="stat-label">Agendados para hoje</div><div class="stat-value">${String(hoje.length).padStart(2,"0")}</div><small>${h.split("-").reverse().join("/")}</small></div>
   <div class="stat"><span class="stat-icon" aria-hidden="true">▦</span><div class="stat-label">Próximos 7 dias</div><div class="stat-value">${String(semana.length).padStart(2,"0")}</div><small>Eventos na sua semana</small></div>
-  <div class="stat"><span class="stat-icon" aria-hidden="true">↻</span><div class="stat-label">Boletos recorrentes</div><div class="stat-value">${String(recorrentesMes.length).padStart(2,"0")}</div><small>Contas que se repetem por mês</small></div>`;
+  <div class="stat"><span class="stat-icon" aria-hidden="true">↻</span><div class="stat-label">Boletos</div><div class="stat-value">${String(boletos.length).padStart(2,"0")}</div><small>Contas com valor na agenda</small></div>`;
   document.getElementById("resumo").innerHTML = html;
 }
 
