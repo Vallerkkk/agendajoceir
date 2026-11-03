@@ -215,8 +215,10 @@ dialog[open]::backdrop{opacity:1}
           <input id="fTelefone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(27) 99999-0000">
         </div>
       </div>
-      <label for="fEndereco" style="margin-top:12px">Endereço</label>
-      <input id="fEndereco" placeholder="Rua, número — bairro, cidade">
+      <div id="campoEndereco">
+        <label for="fEndereco">Endereço</label>
+        <input id="fEndereco" placeholder="Rua, número — bairro, cidade">
+      </div>
     </div>
     <div id="campoValor">
       <label for="fValor">Valor (opcional)</label>
@@ -284,7 +286,7 @@ const CONFIG = {
   categorias: [
     { id: "boletorecorrente", nome: "Boleto recorrente", cor: "#c62828", todoMes: true,  valor: true  },
     { id: "boletoesp",        nome: "Boleto esporádico", cor: "#e07b00", todoMes: false, valor: true  },
-    { id: "visita",           nome: "Visita a cliente",   cor: "#1e5aa8", todoMes: false, valor: false, contato: true },
+    { id: "visita",           nome: "Visita a cliente",   cor: "#1e5aa8", todoMes: false, valor: false, contato: true, endereco: true },
     { id: "compromisso",      nome: "Compromisso",        cor: "#6a1b9a", todoMes: false, valor: false },
     { id: "compromissorecorrente", nome: "Compromisso recorrente", cor: "#546e7a", todoMes: true, valor: false },
     { id: "retorno",          nome: "Retorno a cliente",  cor: "#2e7d32", todoMes: false, valor: false, contato: true },
@@ -544,10 +546,11 @@ function linhaDoDia(e, dataRef) {
     : heRecorrente(e) ? "" : `<button onclick="marcarFeito('${e.id}')">✔ Concluído</button>`;
   /* cliente: telefone e endereço ficam tocáveis (liga / abre no mapa) */
   const tel = (e.telefone || "").replace(/\D/g, "");
-  const contato = c.contato && (e.telefone || e.endereco)
+  const endereco = c.endereco ? e.endereco : "";
+  const contato = c.contato && (e.telefone || endereco)
     ? `<div class="linha-contato">
         ${tel ? `<a href="tel:${tel}">📞 ${escapar(e.telefone)}</a>` : ""}
-        ${e.endereco ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.endereco)}" target="_blank" rel="noopener">📍 ${escapar(e.endereco)}</a>` : ""}
+        ${endereco ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco)}" target="_blank" rel="noopener">📍 ${escapar(endereco)}</a>` : ""}
       </div>` : "";
   return `<div class="linha-evento${pago ? " pago" : atraso ? " atrasado" : ""}">
     <div class="ponto" style="background:${c.cor}"></div>
@@ -689,6 +692,8 @@ function mudouTipo() {
   document.getElementById("campoPessoa").style.display = c.pessoa ? "" : "none";
   document.getElementById("campoValor").style.display = c.valor ? "" : "none";
   document.getElementById("campoContato").style.display = c.contato ? "" : "none";
+  /* o endereço só faz sentido quando é preciso ir até o cliente */
+  document.getElementById("campoEndereco").style.display = c.endereco ? "" : "none";
 }
 function novoEvento(dataStr) {
   editandoId = null;
@@ -737,7 +742,7 @@ function salvarEvento(ev) {
     pessoa: c.pessoa ? document.getElementById("fPessoa").value : "",
     valor: c.valor ? document.getElementById("fValor").value.trim() : "",
     telefone: c.contato ? document.getElementById("fTelefone").value.trim() : "",
-    endereco: c.contato ? document.getElementById("fEndereco").value.trim() : "",
+    endereco: c.endereco ? document.getElementById("fEndereco").value.trim() : "",
     data: c.todoMes ? "" : document.getElementById("fData").value,
     diaMes: c.todoMes ? parseInt(document.getElementById("fDiaRec").value) || 1 : null,
     importante: document.getElementById("fImportante").checked,
@@ -1060,7 +1065,7 @@ function verificarAvisos() {
     avisosEnviados[chave] = Date.now();
     const c = cat(e.tipo);
     const quando = dias === 0 ? "é hoje" : `em ${dias} dia${dias > 1 ? "s" : ""}`;
-    const extra = [e.valor ? "R$ " + e.valor : "", e.pessoa || "", e.telefone ? "tel. " + e.telefone : "", e.endereco || ""].filter(Boolean).join(" · ");
+    const extra = [e.valor ? "R$ " + e.valor : "", e.pessoa || "", e.telefone ? "tel. " + e.telefone : "", c.endereco ? e.endereco || "" : ""].filter(Boolean).join(" · ");
     try {
       new Notification("🔔 " + e.titulo, {
         body: c.nome + " — vence " + quando + (extra ? "\n" + extra : ""),

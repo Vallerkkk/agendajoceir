@@ -294,7 +294,8 @@ function resumoDoDia(rows, hoje) {
       e.telefone ? "tel. " + e.telefone : "",
     ].filter(Boolean).join(" · ");
     let linha = "- " + (NOMES_CAT[e.tipo] || e.tipo) + ": " + e.titulo + (extra ? " (" + extra + ")" : "");
-    if (e.endereco) linha += "\n   endereço: " + e.endereco;
+    /* endereço só faz sentido quando é preciso ir até o cliente */
+    if (e.endereco && e.tipo === "visita") linha += "\n   endereço: " + e.endereco;
     return linha;
   }).join("\n");
 }
