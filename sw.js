@@ -2,7 +2,7 @@
    - Arquivos do app: rede primeiro, cache como reserva (funciona offline)
    - /api/*: nunca em cache (sincronização sempre ao vivo)
 */
-const CACHE = "agenda-js-v3";
+const CACHE = "agenda-js-v4-iphone";
 const ESTATICOS = ["/", "/index.html", "/manifest.webmanifest", "/logo-joceir-silvia.png",
   "/icons/favicon-32.png", "/icons/favicon-48.png",
   "/icons/apple-touch-icon.png", "/icons/icon-192.png", "/icons/icon-512.png",
